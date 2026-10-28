@@ -1,5 +1,5 @@
-export type Band = { id: string; name: string; length: number; quantity: number; side: 'both' | 'left' | 'right' };
-export type Protocol = { bands: Band[]; roll: number; bandWidth: number; boardLength: number; boardWidth: number };
+export type Band = { id: string; name: string; length: number; side: 'both' | 'left' | 'right' };
+export type Protocol = { bands: Band[]; sessions: number; roll: number; bandWidth: number; boardLength: number; boardWidth: number };
 export type Piece = { key: string; name: string; length: number; width: number; side: string; index: number };
 export type Strip = { length: number; used: number; pieces: Piece[]; rows?: Strip[] };
 export type Placement = { strip: Strip; x: number; y: number };
@@ -81,11 +81,11 @@ export function validate(p: Protocol): string[] {
   if (!Number.isFinite(p.bandWidth)||p.bandWidth<=0||p.bandWidth>10000) errors.push('La largeur commune des bandes doit être positive et inférieure ou égale à 10 000 cm.');
   if (p.bandWidth>p.roll) errors.push('La largeur commune des bandes dépasse celle du rouleau.');
   if (!p.bands.length) errors.push('Ajoute au moins une bande.');
+  if (!Number.isInteger(p.sessions)||p.sessions<1||p.sessions>100) errors.push('Le nombre de séances doit être un entier entre 1 et 100.');
   p.bands.forEach((b,i)=>{
     if (!b.name.trim()) errors.push(`La bande ${i+1} doit avoir un nom.`);
     if (!Number.isFinite(b.length)||b.length<=0||b.length>10000) errors.push(`${b.name} : longueur non valide.`);
     if (Number.isFinite(b.length) && !Number.isInteger(b.length)) errors.push(`${b.name} : la longueur doit être un nombre entier de centimètres.`);
-    if (!Number.isInteger(b.quantity)||b.quantity<1||b.quantity>100) errors.push(`${b.name} : quantité attendue entre 1 et 100 par côté.`);
     if (b.length>p.boardLength) errors.push(`${b.name} : longueur supérieure à la plaque. Ce MVP ne gère pas les découpes en plusieurs avancées.`);
   });
   return errors;
@@ -93,7 +93,7 @@ export function validate(p: Protocol): string[] {
 export function plan(p: Protocol) {
   const errors = validate(p);
   if (errors.length) return {errors,strips:[] as Strip[],pages:[] as Placement[][],pageCuts:[] as Cut[][],cuts:0,total:0,waste:0,travel:0};
-  const pieces:Piece[] = p.bands.flatMap((b,index)=>(b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).flatMap(side=>Array.from({length:b.quantity},(_,n)=>({key:`${b.id}-${side}-${n}`,name:b.name,length:b.length,width:p.bandWidth,side,index}))));
+  const pieces:Piece[] = p.bands.flatMap((b,index)=>(b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).flatMap(side=>Array.from({length:p.sessions},(_,n)=>({key:`${b.id}-${side}-${n}`,name:b.name,length:b.length,width:p.bandWidth,side,index}))));
   pieces.sort((a,b)=>b.length-a.length||b.width-a.width);
   const shortStrips:Strip[]=[];
   for (const piece of pieces) {

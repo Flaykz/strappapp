@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeProtocol } from './protocol.ts';
 import { plan, cutsFor, alignOffsets, type Protocol, type Strip } from './planner.ts';
-const example:Protocol={roll:5,bandWidth:2.5,boardLength:43,boardWidth:23,bands:[5,7,9].map((length,i)=>({id:String(i),name:`A${i+1}`,length,quantity:1,side:'both'}))};
+const example:Protocol={sessions:1,roll:5,bandWidth:2.5,boardLength:43,boardWidth:23,bands:[5,7,9].map((length,i)=>({id:String(i),name:`A${i+1}`,length,side:'both'}))};
 test('current and legacy protocols preserve bands with a single global width',()=>{
  assert.deepEqual(decodeProtocol(JSON.parse(JSON.stringify(example)))?.protocol,example);
- const {bandWidth,...legacy}=example;
- const old={...legacy,bands:legacy.bands.map(b=>({...b,width:bandWidth}))};
+ const {bandWidth,sessions,...legacy}=example;
+ const old={...legacy,bands:legacy.bands.map(b=>({...b,width:bandWidth,quantity:sessions}))};
  const migrated=decodeProtocol(old)!;
  assert.equal(migrated.migrated,true);assert.equal(migrated.mixedWidths,false);assert.deepEqual(migrated.protocol,example);
  old.bands[1].width=5;
@@ -20,6 +20,23 @@ function series(lengths:number[],id:string):Strip{
  const rows=lengths.map((length,i)=>({length,used:5,pieces:[{key:`${id}-${i}`,name:id,length,width:5,side:'G',index:0}]}));
  return {length:lengths.reduce((n,l)=>n+l,0),used:5,rows,pieces:rows.flatMap(row=>row.pieces)};
 }
+test('global sessions multiply the entire protocol and validate the count',()=>{
+ const p=plan({...example,sessions:2});
+ assert.equal(p.strips.flatMap(s=>s.pieces).length,12);
+ assert.equal(p.total,42);
+ for(const band of example.bands)for(const side of ['G','D'])assert.equal(p.strips.flatMap(s=>s.pieces).filter(piece=>piece.name===band.name&&piece.side===side).length,2);
+ for(const sessions of [0,-1,1.5,101,NaN])assert.ok(plan({...example,sessions}).errors.length);
+});
+test('legacy quantities become a global count with a warning when inconsistent',()=>{
+ const {sessions,...old}=example;
+ const same=decodeProtocol({...old,bands:old.bands.map(b=>({...b,quantity:2}))})!;
+ assert.equal(same.protocol.sessions,2);assert.equal(same.mixedQuantities,false);
+ const mixed=decodeProtocol({...old,bands:old.bands.map((b,i)=>({...b,quantity:i+1}))})!;
+ assert.equal(mixed.protocol.sessions,1);assert.equal(mixed.mixedQuantities,true);
+ assert.ok(mixed.protocol.bands.every(b=>!('quantity' in b)));
+ assert.equal(decodeProtocol({...example,sessions:'two'}),null);
+ assert.deepEqual(decodeProtocol(JSON.parse(JSON.stringify(same.protocol)))!.protocol,same.protocol);
+});
 test('user four-series example reduces strokes with whole-strip offsets',()=>{
  const page=[[21,12,10],[20,11,10],[10,10],[10,16,8,8]].map((lengths,i)=>({strip:series(lengths,String(i)),x:i*5,y:0}));
  const aligned=alignOffsets(page,5,43);
@@ -43,7 +60,7 @@ test('alignment cannot bridge a missing column or introduce gaps within a column
  assert.ok(aligned.every(item=>item.y>=0&&item.y+item.strip.length<=43));
 });
 test('adjacent columns share one horizontal cutter stroke',()=>{
- const result=plan({...example,boardLength:20,boardWidth:20,bands:[{...example.bands[0],length:10,quantity:4}]});
+ const result=plan({...example,boardLength:20,boardWidth:20,sessions:4,bands:[{...example.bands[0],length:10}]});
  assert.equal(result.cuts,5); // 2 roll cuts + 2 vertical strokes + 1 shared horizontal stroke
  assert.equal(result.pageCuts[0].filter(c=>c.axis==='H').length,1);
  assert.equal(result.pageCuts[0].find(c=>c.axis==='H')!.to,10);
@@ -57,15 +74,15 @@ test('collinear strokes join only when their segments touch',()=>{
  assert.equal(cutsFor([{strip,x:0,y:0},{strip:full,x:0,y:5},{strip,x:0,y:10}],5).length,2);
 });
 test('compatible pairs share a continuous cut across different lengths',()=>{const p=plan(example);assert.equal(p.total,21);assert.equal(p.cuts,4);assert.equal(p.waste,0);assert.equal(p.strips.length,1);assert.equal(p.strips[0].length,21);assert.deepEqual(p.strips[0].pieces.map(x=>x.side),['G','D','G','D','G','D']);assert.deepEqual(p.strips[0].rows?.map(r=>r.length).sort((a,b)=>a-b),[5,7,9]);});
-test('oversized and invalid bands are rejected, never silently truncated',()=>{for(const patch of [{length:44},{quantity:1.5},{length:0}]){assert.ok(plan({...example,bands:[{...example.bands[0],...patch}]}).errors.length);}});
+test('oversized and invalid bands are rejected, never silently truncated',()=>{for(const patch of [{length:44},{length:0}]){assert.ok(plan({...example,bands:[{...example.bands[0],...patch}]}).errors.length);}});
 test('multiple passages stay within board and never overlap',()=>{const input={...example,boardLength:10,boardWidth:5};const p=plan(input);assert.equal(p.pages.length,3);for(const page of p.pages)for(const a of page){assert.ok(a.x+input.roll<=input.boardWidth);assert.ok(a.y+a.strip.length<=input.boardLength);for(const b of page)if(a!==b)assert.ok(a.x+input.roll<=b.x||b.x+input.roll<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);}});
-test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,bands:[{...example.bands[0],quantity:3,side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,4);});
+test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,sessions:3,bands:[{...example.bands[0],side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,4);});
 test('changing global width applies to every generated piece and rejects oversized widths',()=>{
  for(const bandWidth of [2,2.5,5]){const p=plan({...example,bandWidth});assert.equal(p.errors.length,0);assert.ok(p.strips.flatMap(s=>s.pieces).every(piece=>piece.width===bandWidth));assert.equal(p.strips.flatMap(s=>s.pieces).length,6);}
  for(const bandWidth of [0,-1,6,NaN])assert.ok(plan({...example,bandWidth}).errors.length);
 });
 test('merged bands fit within their parent and quantities and area are conserved',()=>{
- const p=plan({...example,boardLength:16,bands:example.bands.map(b=>({...b,quantity:4}))});
+ const p=plan({...example,boardLength:16,sessions:4});
  assert.equal(p.strips.flatMap(s=>s.pieces).length,24);
  assert.equal(new Set(p.strips.flatMap(s=>s.pieces.map(p=>p.key))).size,24);
  assert.equal(p.total,84);assert.equal(p.waste,0);
