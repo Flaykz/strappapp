@@ -13,6 +13,24 @@ Ouvrir l’adresse indiquée par Vite (par défaut http://localhost:5173).
 
 `npm run build` vérifie TypeScript et produit `dist/`. `npm test` vérifie le calcul de découpe.
 
+## Synology / Container Manager
+
+Le déploiement utilise Nginx et les fichiers statiques compilés. Adresse locale : `http://nas.local:8090`.
+
+Depuis le poste de développement :
+
+```sh
+npm ci
+npm run build
+npm test
+scp -O -r dist deploy david@nas.local:/volume1/docker/strappapp/
+ssh david@nas.local 'cd /volume1/docker/strappapp && sudo /usr/local/bin/docker compose -p strappapp -f deploy/compose.yaml up -d'
+```
+
+Le dossier `/volume1/docker/strappapp` doit exister avant la première copie. `-O` utilise le protocole SCP classique compatible avec les chemins des volumes Synology. Le conteneur `strappapp` redémarre automatiquement avec Docker. Les fichiers du site et la configuration Nginx sont montés en lecture seule. Après une modification de `deploy/nginx.conf`, redémarrer uniquement ce service avec `docker compose -p strappapp -f deploy/compose.yaml restart strappapp` depuis ce même dossier (sur Synology, utiliser `sudo /usr/local/bin/docker`).
+
+Le NAS héberge l’application, pas les protocoles : ils restent dans chaque navigateur, associés à l’adresse utilisée. Pour passer de localhost à l’adresse du NAS, exporter le protocole depuis l’ancienne adresse puis l’importer sur la nouvelle. Ce déploiement ne configure ni accès Internet ni redirection de ports du routeur.
+
 ## Fonctionnement
 
 Le protocole et le matériel sont sauvegardés dans le stockage local du navigateur. Export/import JSON pour sauvegarder ou transférer les données. Les exemples initiaux ne sont pas des recommandations de soin.
