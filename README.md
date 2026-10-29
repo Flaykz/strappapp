@@ -13,6 +13,12 @@ Ouvrir l’adresse indiquée par Vite (par défaut http://localhost:5173).
 
 `npm run build` vérifie TypeScript et produit `dist/`. `npm test` vérifie le calcul de découpe.
 
+## GitHub Pages
+
+Le workflow `.github/workflows/pages.yml` teste et compile l’application puis la déploie sur GitHub Pages à chaque push sur `main`. Il peut aussi être lancé manuellement depuis l’onglet Actions. Dans Settings → Pages, choisir GitHub Actions comme source. Un dépôt privé nécessite une offre GitHub compatible avec Pages ; sinon, le dépôt doit être public.
+
+Adresse prévue : `https://flaykz.github.io/strappapp/`. Le workflow compile avec `npm run build -- --base=/strappapp/` pour charger les ressources sous le chemin du dépôt. `npm run build` conserve la racine `/` pour le NAS. Le déploiement Pages ne met pas à jour le NAS. Les données du navigateur ne sont pas transférées entre les deux adresses : utiliser l’export/import.
+
 ## Synology / Container Manager
 
 Le déploiement utilise Nginx et les fichiers statiques compilés. Adresse locale : `http://nas.local:8090`.
