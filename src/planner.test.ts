@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { boardCut, boardLabel, boardPlacement } from './boardView.ts';
 import { decodeProtocol } from './protocol.ts';
 import { plan, cutsFor, alignOffsets, type Protocol, type Strip } from './planner.ts';
 const example:Protocol={sessions:1,roll:5,bandWidth:2.5,boardLength:43,boardWidth:23,bands:[5,7,9].map((length,i)=>({id:String(i),name:`A${i+1}`,length,side:'both'}))};
@@ -88,4 +89,40 @@ test('merged bands fit within their parent and quantities and area are conserved
  assert.equal(p.total,84);assert.equal(p.waste,0);
  for(const s of p.strips){assert.ok(s.length<=16);assert.equal(s.rows!.reduce((n,r)=>n+r.length,0),s.length);for(const row of s.rows!)assert.equal(row.pieces.reduce((n,p)=>n+p.width,0),5);}
  for(const page of p.pages)for(const a of page)for(const b of page)if(a!==b)assert.ok(a.x+5<=b.x||b.x+5<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);
+});
+test('two sessions exceeding one board preserve every band across both passages',()=>{
+ const input:Protocol={...example,sessions:2,boardLength:43,boardWidth:5,bands:[{...example.bands[0],length:30}]};
+ const result=plan(input);
+ assert.deepEqual(result.errors,[]);
+ assert.equal(result.pages.length,2);
+ const pieces=result.pages.flatMap(page=>page.flatMap(({strip})=>strip.pieces));
+ assert.equal(pieces.length,4);
+ assert.equal(new Set(pieces.map(piece=>piece.key)).size,4);
+ for(const side of ['G','D'])for(let session=0;session<2;session++)assert.ok(pieces.some(piece=>piece.key===`${input.bands[0].id}-${side}-${session}`));
+ for(const page of result.pages){
+  assert.equal(page.flatMap(({strip})=>strip.pieces).length,2);
+  for(const {strip,x,y} of page){assert.ok(x>=0&&x+input.roll<=input.boardWidth);assert.ok(y>=0&&y+strip.length<=input.boardLength);}
+ }
+});
+
+test('landscape keeps short strips on the left and cut coordinates consistent',()=>{
+ const result=plan(example);
+ const placement=result.pages[0][0];
+ assert.equal(placement.strip.length,21);
+ assert.deepEqual(boardPlacement(placement,true),{x:0,y:0});
+ assert.deepEqual(boardPlacement(placement,false),{x:0,y:0});
+ // On the 43 × 23 landscape view, the unused 22 cm stay on the right.
+ assert.equal(example.boardLength-(boardPlacement(placement,true).x+placement.strip.length),22);
+ for(const cut of result.pageCuts[0]){
+  const displayed=boardCut(cut,true);
+  assert.equal(displayed.axis,cut.axis==='H'?'V':'H');
+  assert.equal(displayed.fixed,cut.fixed);
+  assert.equal(displayed.from,cut.from);
+  assert.equal(displayed.to,cut.to);
+  assert.equal(displayed.reverse,cut.reverse);
+  assert.deepEqual(boardCut(displayed,true),cut);
+  assert.deepEqual(boardCut(cut,false),cut);
+ }
+ assert.deepEqual(boardPlacement({...placement,x:5,y:1},true),{x:1,y:5});
+ assert.equal(boardLabel(5,10,true),'matrix(0 1 1 0 5 10)');
 });
