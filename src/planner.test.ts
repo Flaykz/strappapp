@@ -60,12 +60,11 @@ test('alignment cannot bridge a missing column or introduce gaps within a column
  assert.equal(aligned[1].y,aligned[0].y+strip.length);
  assert.ok(aligned.every(item=>item.y>=0&&item.y+item.strip.length<=43));
 });
-test('adjacent columns share one horizontal cutter stroke',()=>{
- const result=plan({...example,boardLength:20,boardWidth:20,sessions:4,bands:[{...example.bands[0],length:10}]});
- assert.equal(result.cuts,5); // 2 roll cuts + 2 vertical strokes + 1 shared horizontal stroke
- assert.equal(result.pageCuts[0].filter(c=>c.axis==='H').length,1);
- assert.equal(result.pageCuts[0].find(c=>c.axis==='H')!.to,10);
- assert.equal(result.pageCuts[0].length+result.strips.length,result.cuts);
+test('sequential rows keep a one centimetre gap on each column',()=>{
+ const result=plan({...example,boardLength:22,boardWidth:10,sessions:4,bands:[{...example.bands[0],length:10}]});
+ assert.equal(result.pages.length,1);
+ assert.deepEqual(result.pages[0].map(({x,y})=>[x,y]),[[0,0],[0,11],[5,0],[5,11]]);
+ assert.equal(result.cuts,result.pageCuts[0].length+result.strips.length);
 });
 test('collinear strokes join only when their segments touch',()=>{
  const strip:Strip={length:5,used:5,pieces:[{key:'a',name:'A',side:'G',index:0,length:5,width:2.5},{key:'b',name:'A',side:'D',index:0,length:5,width:2.5}]};
@@ -74,10 +73,16 @@ test('collinear strokes join only when their segments touch',()=>{
  const full:Strip={length:5,used:5,pieces:[{...strip.pieces[0],width:5}]};
  assert.equal(cutsFor([{strip,x:0,y:0},{strip:full,x:0,y:5},{strip,x:0,y:10}],5).length,2);
 });
-test('compatible pairs share a continuous cut across different lengths',()=>{const p=plan(example);assert.equal(p.total,21);assert.equal(p.cuts,4);assert.equal(p.waste,0);assert.equal(p.strips.length,1);assert.equal(p.strips[0].length,21);assert.deepEqual(p.strips[0].pieces.map(x=>x.side),['G','D','G','D','G','D']);assert.deepEqual(p.strips[0].rows?.map(r=>r.length).sort((a,b)=>a-b),[5,7,9]);});
+test('pairs follow protocol order with a gap between rows',()=>{
+ const p=plan(example);
+ assert.equal(p.total,21);assert.equal(p.waste,0);
+ assert.deepEqual(p.strips.map(s=>s.length),[5,7,9]);
+ assert.deepEqual(p.pages[0].map(({y})=>y),[0,6,14]);
+ assert.deepEqual(p.strips.flatMap(s=>s.pieces.map(x=>x.side)),['G','D','G','D','G','D']);
+});
 test('oversized and invalid bands are rejected, never silently truncated',()=>{for(const patch of [{length:44},{length:0}]){assert.ok(plan({...example,bands:[{...example.bands[0],...patch}]}).errors.length);}});
 test('multiple passages stay within board and never overlap',()=>{const input={...example,boardLength:10,boardWidth:5};const p=plan(input);assert.equal(p.pages.length,3);for(const page of p.pages)for(const a of page){assert.ok(a.x+input.roll<=input.boardWidth);assert.ok(a.y+a.strip.length<=input.boardLength);for(const b of page)if(a!==b)assert.ok(a.x+input.roll<=b.x||b.x+input.roll<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);}});
-test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,sessions:3,bands:[{...example.bands[0],side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,4);});
+test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,sessions:3,bands:[{...example.bands[0],side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,5);});
 test('changing global width applies to every generated piece and rejects oversized widths',()=>{
  for(const bandWidth of [2,2.5,5]){const p=plan({...example,bandWidth});assert.equal(p.errors.length,0);assert.ok(p.strips.flatMap(s=>s.pieces).every(piece=>piece.width===bandWidth));assert.equal(p.strips.flatMap(s=>s.pieces).length,6);}
  for(const bandWidth of [0,-1,6,NaN])assert.ok(plan({...example,bandWidth}).errors.length);
@@ -87,7 +92,7 @@ test('merged bands fit within their parent and quantities and area are conserved
  assert.equal(p.strips.flatMap(s=>s.pieces).length,24);
  assert.equal(new Set(p.strips.flatMap(s=>s.pieces.map(p=>p.key))).size,24);
  assert.equal(p.total,84);assert.equal(p.waste,0);
- for(const s of p.strips){assert.ok(s.length<=16);assert.equal(s.rows!.reduce((n,r)=>n+r.length,0),s.length);for(const row of s.rows!)assert.equal(row.pieces.reduce((n,p)=>n+p.width,0),5);}
+ for(const s of p.strips){assert.ok(s.length<=16);assert.equal(s.pieces.reduce((n,p)=>n+p.width,0),5);}
  for(const page of p.pages)for(const a of page)for(const b of page)if(a!==b)assert.ok(a.x+5<=b.x||b.x+5<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);
 });
 test('two sessions exceeding one board preserve every band across both passages',()=>{
@@ -108,11 +113,10 @@ test('two sessions exceeding one board preserve every band across both passages'
 test('landscape keeps short strips on the left and cut coordinates consistent',()=>{
  const result=plan(example);
  const placement=result.pages[0][0];
- assert.equal(placement.strip.length,21);
+ assert.equal(placement.strip.length,5);
  assert.deepEqual(boardPlacement(placement,true),{x:0,y:0});
  assert.deepEqual(boardPlacement(placement,false),{x:0,y:0});
- // On the 43 × 23 landscape view, the unused 22 cm stay on the right.
- assert.equal(example.boardLength-(boardPlacement(placement,true).x+placement.strip.length),22);
+ assert.equal(example.boardLength-(boardPlacement(placement,true).x+placement.strip.length),38);
  for(const cut of result.pageCuts[0]){
   const displayed=boardCut(cut,true);
   assert.equal(displayed.axis,cut.axis==='H'?'V':'H');
