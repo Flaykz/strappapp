@@ -5,7 +5,7 @@ import './wrapping.css';
 
 const colors=['#b9dccc','#f5d59b','#c5d5ed','#e6c4d8','#d5d9a4','#c1dfe5'];
 const fmt=(n:number)=>new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(n);
-export function WrapGuide({protocol,active}:{protocol:Protocol;active:boolean}){
+export function WrapGuide({protocol,active,onCut}:{protocol:Protocol;active:boolean;onCut:()=>void}){
  const [paired,setPaired]=useState(true),[cursor,setCursor]=useState(0),[activeSession,setActiveSession]=useState(1),[animation,setAnimation]=useState(0),[animatedSides,setAnimatedSides]=useState<string[]>([]);
  const lastAction=useRef(-Infinity);
  const advanceButton=useRef<HTMLButtonElement>(null);
@@ -38,7 +38,7 @@ export function WrapGuide({protocol,active}:{protocol:Protocol;active:boolean}){
  function restart(){if(cursor>0&&!confirm('Recommencer le guidage depuis la première bande ?'))return;setCursor(0);setActiveSession(1);setAnimatedSides([]);lastAction.current=performance.now();}
  const sideText=(pieces:WrapPiece[])=>pieces.length===2?'gauche et droite':pieces[0].side==='left'?'gauche':'droite';
  return <section class="wrap-guide">
-  <div class="section-head"><div><h2>Enroule, valide, continue.</h2><p>Une étape à la fois, dans l’ordre du protocole.</p></div><button onClick={restart}>Nouvelle préparation</button></div>
+  <div class="section-head"><div><button onClick={onCut}>← Retour au plan de découpe</button><h2>Enroule, valide, continue.</h2><p>Une étape à la fois, dans l’ordre du protocole.</p></div><button onClick={restart}>Nouvelle préparation</button></div>
   <label class="wrap-mode"><input type="checkbox" checked={paired} disabled={cursor>0} onChange={e=>{setPaired(e.currentTarget.checked);setAnimatedSides([]);}}/><span>Valider gauche et droite ensemble<small>{cursor>0?'Mode fixé pour cette préparation. Recommence pour le changer.':'Décoche pour valider la gauche, puis la droite, séparément.'}</small></span></label>
   <div class="wrap-progress-label"><span>{completedPieces} / {totalPieces} bandes enroulées</span><span>{current?`Étape ${cursor+1} / ${steps.length}`:'Terminé'}</span></div>
   <div class="progress" role="progressbar" aria-label="Bandes enroulées" aria-valuemin={0} aria-valuemax={totalPieces} aria-valuenow={completedPieces}><span style={{width:`${totalPieces?completedPieces/totalPieces*100:0}%`}}/></div>

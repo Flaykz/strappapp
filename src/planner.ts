@@ -93,70 +93,30 @@ export function validate(p: Protocol): string[] {
 export function plan(p: Protocol) {
   const errors = validate(p);
   if (errors.length) return {errors,strips:[] as Strip[],pages:[] as Placement[][],pageCuts:[] as Cut[][],cuts:0,total:0,waste:0,travel:0};
-  const pieces:Piece[] = p.bands.flatMap((b,index)=>(b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).flatMap(side=>Array.from({length:p.sessions},(_,n)=>({key:`${b.id}-${side}-${n}`,name:b.name,length:b.length,width:p.bandWidth,side,index}))));
-  pieces.sort((a,b)=>b.length-a.length||b.width-a.width);
-  const shortStrips:Strip[]=[];
-  for (const piece of pieces) {
-    let strip=shortStrips.find(s=>s.length===piece.length&&s.used+piece.width<=p.roll+1e-8);
-    if (!strip) {strip={length:piece.length,used:0,pieces:[]};shortStrips.push(strip);}
-    strip.pieces.push(piece);strip.used+=piece.width;
-  }
-  // Compare several row groupings and placements using actual shared cuts.
-  // Join rows with identical width boundaries: one continuous longitudinal cut
-  // can then split several lengths. Never exceed the usable board length.
-  const signature=(s:Strip)=>rowsOf(s)[0].pieces.map(piece=>piece.width).join('|');
-  function grouped(order:Strip[],mode:number){
+  // Follow the same session, band and side order as the winding guide.
+  const pieces:Piece[] = Array.from({length:p.sessions},(_,copy)=>p.bands.flatMap((b,index)=>
+    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,name:b.name,length:b.length,width:p.bandWidth,side,index})))).flat();
   const strips:Strip[]=[];
-  for (const row of order) {
-    const candidates=strips.filter(s=>signature(s)===signature(row)&&s.length+row.length<=p.boardLength+1e-8);
-    candidates.sort((a,b)=>mode===1?a.length-b.length:b.length-a.length);
-    const target=mode===2?undefined:candidates[0];
-    if(target){target.rows!.push(row);target.length+=row.length;target.pieces.push(...row.pieces);}
-    else strips.push({length:row.length,used:row.used,pieces:[...row.pieces],rows:[row]});
+  for(const piece of pieces){
+    const last=strips.at(-1);
+    if(last && last.length===piece.length && last.used+piece.width<=p.roll+eps){last.pieces.push(piece);last.used+=piece.width;}
+    else strips.push({length:piece.length,used:piece.width,pieces:[piece]});
   }
-  return strips;
-  }
-  function placed(strips:Strip[],shelf:boolean){
-  // Fill each column from its own bottom edge, rather than leaving shelf gaps.
-  const pages:{strip:Strip;x:number;y:number}[][]=[];
-  const heights:number[][]=[];
-  const columns=Math.floor((p.boardWidth+1e-8)/p.roll);
-  let shelfX=0,shelfY=0,shelfHeight=0;
+  // Fill a single board in winding order. Leave 1 cm between rows in a column.
+  // Once a page is full, later pieces are never moved back to an earlier page.
+  const pages:Placement[][]=[];
+  let column=0, y=0;
+  const columns=Math.floor((p.boardWidth+eps)/p.roll);
   for(const strip of strips){
-    if(shelf){
-      if(!pages.length)pages.push([]);
-      if(shelfX+p.roll>p.boardWidth+eps){shelfX=0;shelfY+=shelfHeight;shelfHeight=0;}
-      if(shelfY+strip.length>p.boardLength+eps){pages.push([]);shelfX=0;shelfY=0;shelfHeight=0;}
-      pages.at(-1)!.push({strip,x:shelfX,y:shelfY});shelfX+=p.roll;shelfHeight=Math.max(shelfHeight,strip.length);continue;
-    }
-    let bestPage=-1,bestColumn=-1,bestRemaining=Infinity;
-    heights.forEach((page,pi)=>page.forEach((height,ci)=>{
-      const remaining=p.boardLength-height-strip.length;
-      if(remaining>=-1e-8&&remaining<bestRemaining){bestPage=pi;bestColumn=ci;bestRemaining=remaining;}
-    }));
-    if(bestPage<0){bestPage=pages.length;bestColumn=0;pages.push([]);heights.push(Array(columns).fill(0));}
-    pages[bestPage].push({strip,x:bestColumn*p.roll,y:heights[bestPage][bestColumn]});
-    heights[bestPage][bestColumn]+=strip.length;
+    if(!pages.length)pages.push([]);
+    if(y+strip.length>p.boardLength+eps){column++;y=0;}
+    if(column>=columns){pages.push([]);column=0;y=0;}
+    pages.at(-1)!.push({strip,x:column*p.roll,y});
+    y+=strip.length+1;
   }
-  return pages;
-  }
-  const candidates=[];
-  const orders=[shortStrips,[...shortStrips].reverse(),[...shortStrips].sort((a,b)=>signature(a).localeCompare(signature(b))||b.length-a.length)];
-  // Bound the interactive search for unusually large imports.
-  for(const order of shortStrips.length>300?orders.slice(0,1):orders)for(const mode of [0,1,2]){
-    const strips=grouped(order,mode);
-    for(const sorted of [strips,[...strips].sort((a,b)=>b.length-a.length)])for(const shelf of [false,true]){
-      const originalPages=placed(sorted,shelf);
-      for(const pages of [originalPages,originalPages.map(page=>alignOffsets(page,p.roll,p.boardLength))]){
-      const pageCuts=pages.map(page=>cutsFor(page,p.roll));
-      const cuts=strips.length+pageCuts.reduce((n,c)=>n+c.length,0);
-      const travel=pageCuts.reduce((n,c)=>n+travelFor(c),0);
-      candidates.push({strips,pages,pageCuts,cuts,travel});
-      }
-    }
-  }
-  candidates.sort((a,b)=>a.cuts-b.cuts||a.pages.length-b.pages.length||a.strips.length-b.strips.length||a.travel-b.travel);
-  const {strips,pages,pageCuts,cuts,travel}=candidates[0];
+  const pageCuts=pages.map(page=>cutsFor(page,p.roll));
+  const cuts=strips.length+pageCuts.reduce((n,c)=>n+c.length,0);
+  const travel=pageCuts.reduce((n,c)=>n+travelFor(c),0);
   const total=strips.reduce((n,s)=>n+s.length,0);
   const waste=strips.reduce((n,s)=>n+(p.roll-s.used)*s.length,0);
   return {errors,strips,pages,pageCuts,cuts,total,waste,travel};
