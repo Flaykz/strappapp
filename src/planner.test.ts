@@ -60,10 +60,10 @@ test('alignment cannot bridge a missing column or introduce gaps within a column
  assert.equal(aligned[1].y,aligned[0].y+strip.length);
  assert.ok(aligned.every(item=>item.y>=0&&item.y+item.strip.length<=43));
 });
-test('sequential rows keep a one centimetre gap on each column',()=>{
- const result=plan({...example,boardLength:22,boardWidth:10,sessions:4,bands:[{...example.bands[0],length:10}]});
+test('parallel strips keep a one centimetre gap across the board',()=>{
+ const result=plan({...example,boardLength:22,boardWidth:11,sessions:4,bands:[{...example.bands[0],length:10}]});
  assert.equal(result.pages.length,1);
- assert.deepEqual(result.pages[0].map(({x,y})=>[x,y]),[[0,0],[0,11],[5,0],[5,11]]);
+ assert.deepEqual(result.pages[0].map(({x,y})=>[x,y]),[[0,0],[0,10],[6,0],[6,10]]);
  assert.equal(result.cuts,result.pageCuts[0].length+result.strips.length);
 });
 test('collinear strokes join only when their segments touch',()=>{
@@ -73,16 +73,16 @@ test('collinear strokes join only when their segments touch',()=>{
  const full:Strip={length:5,used:5,pieces:[{...strip.pieces[0],width:5}]};
  assert.equal(cutsFor([{strip,x:0,y:0},{strip:full,x:0,y:5},{strip,x:0,y:10}],5).length,2);
 });
-test('pairs follow protocol order with a gap between rows',()=>{
+test('pairs follow protocol order along each column',()=>{
  const p=plan(example);
  assert.equal(p.total,21);assert.equal(p.waste,0);
  assert.deepEqual(p.strips.map(s=>s.length),[5,7,9]);
- assert.deepEqual(p.pages[0].map(({y})=>y),[0,6,14]);
+ assert.deepEqual(p.pages[0].map(({y})=>y),[0,5,12]);
  assert.deepEqual(p.strips.flatMap(s=>s.pieces.map(x=>x.side)),['G','D','G','D','G','D']);
 });
 test('oversized and invalid bands are rejected, never silently truncated',()=>{for(const patch of [{length:44},{length:0}]){assert.ok(plan({...example,bands:[{...example.bands[0],...patch}]}).errors.length);}});
 test('multiple passages stay within board and never overlap',()=>{const input={...example,boardLength:10,boardWidth:5};const p=plan(input);assert.equal(p.pages.length,3);for(const page of p.pages)for(const a of page){assert.ok(a.x+input.roll<=input.boardWidth);assert.ok(a.y+a.strip.length<=input.boardLength);for(const b of page)if(a!==b)assert.ok(a.x+input.roll<=b.x||b.x+input.roll<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);}});
-test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,sessions:3,bands:[{...example.bands[0],side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,5);});
+test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,sessions:3,bands:[{...example.bands[0],side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,4);});
 test('changing global width applies to every generated piece and rejects oversized widths',()=>{
  for(const bandWidth of [2,2.5,5]){const p=plan({...example,bandWidth});assert.equal(p.errors.length,0);assert.ok(p.strips.flatMap(s=>s.pieces).every(piece=>piece.width===bandWidth));assert.equal(p.strips.flatMap(s=>s.pieces).length,6);}
  for(const bandWidth of [0,-1,6,NaN])assert.ok(plan({...example,bandWidth}).errors.length);

@@ -102,17 +102,17 @@ export function plan(p: Protocol) {
     if(last && last.length===piece.length && last.used+piece.width<=p.roll+eps){last.pieces.push(piece);last.used+=piece.width;}
     else strips.push({length:piece.length,used:piece.width,pieces:[piece]});
   }
-  // Fill a single board in winding order. Leave 1 cm between rows in a column.
+  // Leave 1 cm between parallel roll-width strips, vertically in the landscape view.
   // Once a page is full, later pieces are never moved back to an earlier page.
   const pages:Placement[][]=[];
   let column=0, y=0;
-  const columns=Math.floor((p.boardWidth+eps)/p.roll);
+  const columns=Math.floor((p.boardWidth+1+eps)/(p.roll+1));
   for(const strip of strips){
     if(!pages.length)pages.push([]);
     if(y+strip.length>p.boardLength+eps){column++;y=0;}
     if(column>=columns){pages.push([]);column=0;y=0;}
-    pages.at(-1)!.push({strip,x:column*p.roll,y});
-    y+=strip.length+1;
+    pages.at(-1)!.push({strip,x:column*(p.roll+1),y});
+    y+=strip.length;
   }
   const pageCuts=pages.map(page=>cutsFor(page,p.roll));
   const cuts=strips.length+pageCuts.reduce((n,c)=>n+c.length,0);
