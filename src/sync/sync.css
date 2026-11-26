@@ -1,0 +1,10 @@
+.sync-panel{margin-top:28px;border:1px solid #d9e1d6;border-radius:12px;background:#fafbf7;padding:4px 18px}
+.sync-panel summary{cursor:pointer;padding:12px 0;font-weight:600;color:#294637;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.sync-status{font-size:12px;font-weight:500;color:#658074}
+.sync-offline,.sync-error{color:#9c4324}
+.sync-body{padding-bottom:14px}
+.sync-fields{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.sync-fields label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#6b7a70;flex:1 1 220px}
+.sync-fields input{padding:9px 10px;border:1px solid #d7dfd5;border-radius:8px}
+.sync-message{color:#9c4324;font-size:13px}
+.sync-actions{display:flex;gap:8px;flex-wrap:wrap}

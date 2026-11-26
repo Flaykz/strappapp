@@ -1,6 +1,6 @@
 import type { Protocol, Band } from './planner.ts';
 
-// randomUUID is HTTPS-only; getRandomValues also works on the local NAS over HTTP.
+// getRandomValues works in any context, unlike randomUUID which requires a secure context (HTTPS).
 export function newBandId():string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join('');
 }
