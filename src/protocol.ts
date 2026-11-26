@@ -11,7 +11,6 @@ export function decodeProtocol(value: unknown): { protocol: Protocol; migrated: 
   if (![p.roll,p.boardLength,p.boardWidth].every(n=>typeof n==='number') || !Array.isArray(p.bands) || p.bands.length>200) return null;
   // `bandWidth` (global) and per-band `width` are legacy: tolerated and ignored, a band is now half the roll (or the full roll).
   const oldQuantity=!Object.hasOwn(p,'sessions');
-  const migrated=oldQuantity;
   if (!oldQuantity && typeof p.sessions!=='number') return null;
   const bands: Band[]=[];
   const quantities:number[]=[];
@@ -23,5 +22,6 @@ export function decodeProtocol(value: unknown): { protocol: Protocol; migrated: 
   }
   if(new Set(bands.map(b=>b.id)).size!==bands.length)return null;
   const mixedQuantities=new Set(quantities).size>1;
-  return {protocol:{roll:p.roll as number,boardLength:p.boardLength as number,boardWidth:p.boardWidth as number,sessions:oldQuantity?(mixedQuantities?1:quantities[0]??1):p.sessions as number,bands},migrated,mixedQuantities};
+  const previousSessions=oldQuantity?(mixedQuantities?1:quantities[0]??1):p.sessions as number;
+  return {protocol:{roll:p.roll as number,boardLength:p.boardLength as number,boardWidth:p.boardWidth as number,sessions:1,bands},migrated:oldQuantity||previousSessions!==1,mixedQuantities};
 }

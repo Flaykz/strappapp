@@ -1,4 +1,4 @@
-import { cutsFor, type Placement, type Cut } from './planner';
+import { cutsFor, type Placement } from './planner';
 import { toView } from './boardView';
 
 export const colors=['#b9dccc','#f5d59b','#c5d5ed','#e6c4d8','#d5d9a4','#c1dfe5'];
@@ -18,18 +18,22 @@ function Ruler({size,top,fs}:{size:number;top:boolean;fs:number}){
  return <g>{ticks}</g>;
 }
 
+/** Subtle 5 cm work-surface grid, below strips and cutting marks. */
+function WorkGrid({width,height,fs}:{width:number;height:number;fs:number}){
+ const lines=[];
+ for(let x=5;x<width-1e-8;x+=5)lines.push(<line x1={x} y1="0" x2={x} y2={height}/>);
+ for(let y=5;y<height-1e-8;y+=5)lines.push(<line x1="0" y1={y} x2={width} y2={y}/>);
+ return <g stroke="#6f8579" stroke-width={fs*0.035} opacity="0.28" pointer-events="none">{lines}</g>;
+}
+
 export function BoardPlan({page,pageIndex,roll,boardLength,boardWidth,swapped}:{page:Placement[];pageIndex:number;roll:number;boardLength:number;boardWidth:number;swapped:boolean}){
  const viewW=swapped?boardWidth:boardLength,viewH=swapped?boardLength:boardWidth;
  const fs=Math.max(0.7,Math.max(viewW,viewH)/50);
- const marginTop=fs*3.6,marginLeft=fs*5.2;
+ const marginTop=swapped?fs:fs*3.6,marginLeft=swapped?fs*5.2:fs;
  const cuts=cutsFor(page,roll);
- // Vertical-in-plan cuts (axis V) measure x; their cotes are listed once per distinct value.
- const lineOf=(cut:Cut)=>page.find(({y})=>cut.axis==='V'&&near(y,cut.from));
+ // Vertical-in-plan cuts (axis V) measure x; every ruler position is listed once on the X scale.
  const xValues=cuts.filter(c=>c.axis==='V').map(c=>c.fixed);
- const sharedX=new Set(xValues.filter(v=>xValues.filter(w=>near(v,w)).length>1).map(v=>Math.round(v*1000)));
- const yValues=[...page.flatMap(({y})=>[y,y+roll]),...cuts.filter(c=>c.axis==='H').map(c=>c.fixed)];
  const distinct=(values:number[])=>values.filter((v,i)=>values.findIndex(w=>near(v,w))===i);
- const halo={stroke:'#fffefb','stroke-width':fs*0.22,'paint-order':'stroke'};
  const pt=(x:number,y:number)=>toView(x,y,swapped);
  const rect=(x:number,y:number,w:number,h:number)=>{const a=pt(x,y),b=pt(x+w,y+h);return {x:Math.min(a.u,b.u),y:Math.min(a.v,b.v),width:Math.abs(b.u-a.u),height:Math.abs(b.v-a.v)};};
  // In the plan, x cotes sit on the edge running along x; y cotes on the other edge.
@@ -43,7 +47,8 @@ export function BoardPlan({page,pageIndex,roll,boardLength,boardWidth,swapped}:{
  };
  return <svg viewBox={`${-marginLeft} ${-marginTop} ${viewW+marginLeft+fs} ${viewH+marginTop+fs}`} role="img" aria-label={`Plan de découpe, passage ${pageIndex+1}`}>
   <rect width={viewW} height={viewH} fill="#edf1ec" stroke="#becac0" stroke-width={fs*0.08}/>
-  <Ruler size={viewW} top fs={fs}/><Ruler size={viewH} top={false} fs={fs}/>
+  <WorkGrid width={viewW} height={viewH} fs={fs}/>
+  {swapped?<Ruler size={viewH} top={false} fs={fs}/>:<Ruler size={viewW} top fs={fs}/>} 
   {page.map(({strip,x,y})=><g>
    <rect {...rect(x,y,strip.length,roll)} fill="#e3e0d8" stroke="#74867b" stroke-width={fs*0.06}/>
    {strip.segments.map(seg=>seg.pieces.map((piece,lane)=>{
@@ -54,14 +59,6 @@ export function BoardPlan({page,pageIndex,roll,boardLength,boardWidth,swapped}:{
    }))}
   </g>)}
   {cuts.map(cut=>{const horizontal=cut.axis==='H';const a=pt(horizontal?cut.from:cut.fixed,horizontal?cut.fixed:cut.from),b=pt(horizontal?cut.to:cut.fixed,horizontal?cut.fixed:cut.to);return <line x1={a.u} y1={a.v} x2={b.u} y2={b.v} stroke={accent} stroke-width={fs*0.09} stroke-dasharray={`${fs*0.35} ${fs*0.2}`}/>;})}
-  {cuts.filter(c=>c.axis==='V'&&!sharedX.has(Math.round(c.fixed*1000))).map(cut=>{
-   const line=lineOf(cut),top=pt(cut.fixed,cut.from);
-   if(!line)return null;
-   return swapped
-    ?<text x={top.u+fs*0.2} y={top.v-fs*0.2} font-size={fs*0.75} font-weight="700" fill={accent} {...halo}>{fmt(cut.fixed)}</text>
-    :<text x={top.u-fs*0.2} y={top.v+fs*0.85} text-anchor="end" font-size={fs*0.75} font-weight="700" fill={accent} {...halo}>{fmt(cut.fixed)}</text>;
-  })}
-  {distinct(xValues.filter(v=>sharedX.has(Math.round(v*1000)))).map(v=>edgeCote(v,true,accent))}
-  {distinct(yValues).map(v=>edgeCote(v,false,'#2f5b49'))}
+  {distinct(xValues).map(v=>edgeCote(v,true,accent))}
  </svg>;
 }

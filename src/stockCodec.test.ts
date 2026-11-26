@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeStock } from './stockCodec.ts';
+import { formatRollTypeName, rollTypeName, stockBrands } from './stock.ts';
 
 const base = () => ({ types: [{ id: 't', name: 'T', width: 4, length: 1000 }], rolls: [{ id: 'r', typeId: 't', name: 'R1', remaining: 500 }], selectedTypeId: 't' });
 
@@ -31,4 +32,15 @@ test('invalid preparation is dropped but types and rolls are kept, including pro
 });
 test('a width of 0 (number field being edited) is tolerated', () => {
   assert.notEqual(decodeStock({ ...base(), types: [{ id: 't', name: 'T', width: 0, length: 1000 }] }), null);
+});
+test('roll format names are generated from family, width in cm and length in m', () => {
+  assert.equal(formatRollTypeName('Strappal', 4, 1000), 'Strappal 4 cm × 10 m');
+  assert.equal(rollTypeName({ id: 't', name: 'Legacy name', brand: 'Tensoplast', width: 8, length: 300 }), 'Tensoplast 8 cm × 3 m');
+});
+test('families remain backward compatible with stocks saved before the family field', () => {
+  const legacy = base();
+  assert.deepEqual(decodeStock(legacy), legacy);
+  assert.deepEqual(stockBrands(legacy), ['T']);
+  const current = { ...legacy, brands: ['Strappal'], types: [{ ...legacy.types[0], brand: 'Strappal' }] };
+  assert.deepEqual(decodeStock(current), current);
 });

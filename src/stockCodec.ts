@@ -28,10 +28,11 @@ function decodePreparation(value: unknown): Preparation | null {
 export function decodeStock(value: unknown): Stock | null {
   if (!isObj(value) || !Array.isArray(value.types) || !Array.isArray(value.rolls) || typeof value.selectedTypeId !== 'string') return null;
   if (value.types.length > MAX_ITEMS || value.rolls.length > MAX_ITEMS) return null;
+  if (value.brands !== undefined && (!Array.isArray(value.brands) || value.brands.length > MAX_ITEMS || value.brands.some(brand => typeof brand !== 'string'))) return null;
   const types: Stock['types'] = [];
   for (const t of value.types) {
-    if (!isObj(t) || typeof t.id !== 'string' || typeof t.name !== 'string' || !isNum(t.width) || t.width < 0 || !isNum(t.length) || t.length < 0) return null;
-    types.push({ id: t.id, name: t.name, width: t.width, length: t.length });
+    if (!isObj(t) || typeof t.id !== 'string' || typeof t.name !== 'string' || (t.brand !== undefined && typeof t.brand !== 'string') || !isNum(t.width) || t.width < 0 || !isNum(t.length) || t.length < 0) return null;
+    types.push({ id: t.id, name: t.name, width: t.width, length: t.length, ...(typeof t.brand === 'string'?{brand:t.brand}:{}) });
   }
   const rolls: Stock['rolls'] = [];
   for (const r of value.rolls) {
@@ -39,7 +40,7 @@ export function decodeStock(value: unknown): Stock | null {
     rolls.push({ id: r.id, typeId: r.typeId, name: r.name, remaining: r.remaining });
   }
   if (new Set(types.map(t => t.id)).size !== types.length || new Set(rolls.map(r => r.id)).size !== rolls.length) return null;
-  const stock: Stock = { types, rolls, selectedTypeId: value.selectedTypeId };
+  const stock: Stock = { types, rolls, selectedTypeId: value.selectedTypeId, ...(Array.isArray(value.brands)?{brands:[...new Set(value.brands as string[])]}:{}) };
   if (value.preparation !== undefined && value.preparation !== null) {
     // An invalid remote preparation only loses the pass tracking, not the whole stock.
     const preparation = decodePreparation(value.preparation);

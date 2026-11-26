@@ -23,6 +23,9 @@ export function CuttingBoard({children,page,total,rotateLabel,onRotate,pieces,to
   return()=>document.removeEventListener('fullscreenchange',changed);
  },[]);
  useEffect(()=>{
+  if(matchMedia('(max-width: 800px)').matches)setExpanded(true);
+ },[]);
+ useEffect(()=>{
   if(!expanded)return;
   const overflow=document.body.style.overflow;document.body.style.overflow='hidden';
   toggle.current?.focus({preventScroll:true});

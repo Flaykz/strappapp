@@ -28,15 +28,16 @@ test('global sessions multiply the entire protocol and validate the count',()=>{
  for(const band of example.bands)for(const side of ['G','D'])assert.equal(p.strips.flatMap(s=>s.pieces).filter(piece=>piece.name===band.name&&piece.side===side).length,2);
  for(const sessions of [0,-1,1.5,101,NaN])assert.ok(plan({...example,sessions}).errors.length);
 });
-test('legacy quantities become a global count with a warning when inconsistent',()=>{
+test('saved session counts and legacy quantities are migrated to one session',()=>{
  const {sessions,...old}=example;
  const same=decodeProtocol({...old,bands:old.bands.map(b=>({...b,quantity:2}))})!;
- assert.equal(same.protocol.sessions,2);assert.equal(same.mixedQuantities,false);
+ assert.equal(same.protocol.sessions,1);assert.equal(same.migrated,true);assert.equal(same.mixedQuantities,false);
  const mixed=decodeProtocol({...old,bands:old.bands.map((b,i)=>({...b,quantity:i+1}))})!;
  assert.equal(mixed.protocol.sessions,1);assert.equal(mixed.mixedQuantities,true);
  assert.ok(mixed.protocol.bands.every(b=>!('quantity' in b)));
  assert.equal(decodeProtocol({...example,sessions:'two'}),null);
  assert.deepEqual(decodeProtocol(JSON.parse(JSON.stringify(same.protocol)))!.protocol,same.protocol);
+ assert.equal(decodeProtocol({...example,sessions:3})?.protocol.sessions,1);
 });
 const ids=(strip:Placement['strip'])=>strip.segments.map(seg=>seg.pieces.map(piece=>`${piece.name}${piece.side}`));
 const spec:Protocol={sessions:1,roll:5,boardLength:45,boardWidth:23,bands:[20,15,8,25,12].map((length,i)=>({id:String(i+1),name:String(i+1),length,side:'both'}))};

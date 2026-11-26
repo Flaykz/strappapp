@@ -1,20 +1,32 @@
 import type { Strip } from './planner';
 import { decodeStock } from './stockCodec.ts';
 
-export type RollType = { id:string; name:string; width:number; length:number };
+export type RollType = { id:string; name:string; width:number; length:number; brand?:string };
 export type RollStock = { id:string; typeId:string; name:string; remaining:number };
 /** Roll taken by one recorded pass: exactly what to give back to the same roll on cancel. */
 export type PassRecord = { recordedAt:number; consumed:{ rollId:string; length:number }[] };
 /** Tracking of the current preparation, kept in the stock so it is synchronised with it. `passes` is keyed by pass index. */
 export type Preparation = { key:string; passes:Record<string,PassRecord> };
-export type Stock = { types:RollType[]; rolls:RollStock[]; selectedTypeId:string; preparation?:Preparation };
-export const initialStock:Stock={types:[{id:'standard',name:'Strappal 4 cm × 10 m',width:4,length:1000}],rolls:[],selectedTypeId:'standard'};
+export type Stock = { types:RollType[]; rolls:RollStock[]; selectedTypeId:string; brands?:string[]; preparation?:Preparation };
+const displayNumber=(n:number)=>new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(n);
+export const formatRollTypeName=(brand:string,width:number,length:number)=>`${brand.trim()||'Sans famille'} ${displayNumber(width)} cm × ${displayNumber(length/100)} m`;
+export function rollTypeBrand(type:RollType){
+ if(type.brand?.trim())return type.brand.trim();
+ return type.name.replace(/\s+\d+(?:[.,]\d+)?\s*cm(?:\s*[×x]\s*\d+(?:[.,]\d+)?\s*m)?\s*$/i,'').trim()||'Autre';
+}
+export const rollTypeName=(type:RollType)=>formatRollTypeName(rollTypeBrand(type),type.width,type.length);
+export function stockBrands(stock:Stock){return [...new Set([...(stock.brands??[]),...stock.types.map(rollTypeBrand)].map(x=>x.trim()).filter(Boolean))];}
+export const initialStock:Stock={brands:['Strappal','Tensoplast'],types:[
+ {id:'strappal-4x10',brand:'Strappal',name:'Strappal 4 cm × 10 m',width:4,length:1000},
+ {id:'strappal-4x5',brand:'Strappal',name:'Strappal 4 cm × 5 m',width:4,length:500},
+ {id:'tensoplast-8x3',brand:'Tensoplast',name:'Tensoplast 8 cm × 3 m',width:8,length:300}
+],rolls:[],selectedTypeId:'strappal-4x10'};
 export function loadStock():Stock {
  try {return decodeStock(JSON.parse(localStorage.getItem('strapp-stock')||'null'))??initialStock;} catch {return initialStock;}
 }
 /** Type whose width matches (used to preselect a type when a protocol is imported). */
 export function typeForWidth(stock:Stock,width:number){return stock.types.find(t=>Math.abs(t.width-width)<1e-8);}
-export function withNewType(stock:Stock,width:number,id:string):Stock{return {...stock,types:[...stock.types,{id,name:`Rouleau ${width} cm`,width,length:1000}],selectedTypeId:id};}
+export function withNewType(stock:Stock,width:number,id:string):Stock{const brand=stockBrands(stock)[0]??'Strappal';return {...stock,brands:stockBrands(stock),types:[...stock.types,{id,brand,name:formatRollTypeName(brand,width,1000),width,length:1000}],selectedTypeId:id};}
 export function allocateStock(strips:Strip[],stock:Stock){
  const rolls=stock.rolls.filter(r=>r.typeId===stock.selectedTypeId).map(r=>({...r}));
  const assignments=strips.map(strip=>{
