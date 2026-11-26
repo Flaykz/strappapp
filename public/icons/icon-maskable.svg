@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Strapp">
+  <rect width="512" height="512" fill="#176b58"/>
+  <path d="M166 154h180v48H214v50h112v48H214v54h132v48H166z" fill="#fffefb"/>
+  <circle cx="350" cy="354" r="24" fill="#e4b85f"/>
+</svg>

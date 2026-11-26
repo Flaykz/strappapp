@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "Strapp — préparer demain",
+  "short_name": "Strapp",
+  "description": "Prépare tes bandes de Strappal et suis ton stock, même hors connexion.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f5ef",
+  "theme_color": "#176b58",
+  "categories": ["health", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

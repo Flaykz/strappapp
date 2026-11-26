@@ -12,6 +12,7 @@ import { PassStock } from './PassStock';
 import { RollSelect } from './RollSelect';
 import { planKey, recordedPasses } from './preparation';
 import { loadStock, sessionsAvailableUpToFour, typeForWidth, withNewType, type Stock } from './stock';
+import { applyServiceWorkerUpdate, onServiceWorkerUpdate } from './registerServiceWorker';
 
 const initial:Protocol={sessions:1,roll:5,boardLength:43,boardWidth:23,bands:[5,7,9].map((length,i)=>({id:`example-${i}`,name:`A${i+1}`,length,side:'both'}))};
 const fmt=(n:number)=>new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(n);
@@ -28,7 +29,7 @@ function load():{protocol:Protocol;notice:string} {
 }
 const loaded=load();
 function App(){
- const [p,setP]=useState<Protocol>(loaded.protocol),[tab,setTab]=useState(0),[notice,setNotice]=useState(loaded.notice),[saved,setSaved]=useState(true),[swapped,setSwapped]=useState(false),[selectedPage,setSelectedPage]=useState(0);
+ const [p,setP]=useState<Protocol>(loaded.protocol),[tab,setTab]=useState(0),[notice,setNotice]=useState(loaded.notice),[saved,setSaved]=useState(true),[swapped,setSwapped]=useState(false),[selectedPage,setSelectedPage]=useState(0),[updateAvailable,setUpdateAvailable]=useState(false);
  const [stock,setStock]=useState<Stock>(loadStock);
  const {engine:syncEngine,state:syncState}=useSync(p,stock,{onProtocol:remote=>{setP(remote);setNotice('Protocole mis à jour depuis la synchronisation.');},onStock:remote=>{setStock(remote);setNotice('Stock mis à jour depuis la synchronisation.');}});
  const selectedType=stock.types.find(t=>t.id===stock.selectedTypeId);
@@ -47,6 +48,7 @@ function App(){
  const page=result.pages[pageIndex]??[];
  const wide=(swapped?p.boardWidth:p.boardLength)>=(swapped?p.boardLength:p.boardWidth);
  useEffect(()=>{setSelectedPage(0);},[p]);
+ useEffect(()=>onServiceWorkerUpdate(setUpdateAvailable),[]);
  useEffect(()=>{try{localStorage.setItem('strapp-stock',JSON.stringify(stock));}catch{setNotice('Sauvegarde du stock indisponible sur cet appareil.');}},[stock]);
  useEffect(()=>{try{localStorage.setItem('strapp-protocol',JSON.stringify(p));setSaved(true);}catch{setSaved(false);}},[p]);
  function update(id:string,patch:Partial<Band>){setP({...p,bands:p.bands.map(b=>b.id===id?{...b,...patch}:b)});}
@@ -54,7 +56,7 @@ function App(){
  function exportFile(){const url=URL.createObjectURL(new Blob([JSON.stringify(eff,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='strapp-protocole.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  async function importFile(file?:File){if(!file)return;try{if(file.size>1000000)throw Error();const decoded=decodeProtocol(JSON.parse(await file.text()));if(!decoded)throw Error();if(confirm(decoded.mixedQuantities?'Les anciennes quantités diffèrent : le protocole sera importé pour 1 séance complète. Remplacer le protocole actuel ?':'Remplacer le protocole actuel par celui du fichier ?')){setP(decoded.protocol);const match=typeForWidth(stock,decoded.protocol.roll);if(match)setStock({...stock,selectedTypeId:match.id});setNotice(match||!selectedType?'Protocole importé.':`Protocole importé. Aucun type de rouleau de ${decoded.protocol.roll} cm dans ton stock : la largeur du type sélectionné (${selectedType.width} cm) est utilisée.`);}}catch{setNotice('Import impossible : le fichier de protocole est invalide.');}}
  const num=(label:string,value:number,change:(n:number)=>void,integer=false)=><label>{label}<input type="number" min={integer?1:0.1} step={integer?1:0.1} value={value||''} onInput={e=>change(e.currentTarget.valueAsNumber||0)}/></label>;
- return <><header><a class="brand" href="#">▥ <span>strapp<span class="dot">.</span></span></a><span class="save">{saved?'● Sauvegardé sur cet appareil':'⚠ Sauvegarde indisponible : exporte ton protocole'}</span></header><main><div class="intro"><div class="eyebrow">LE SOIN COMMENCE LA VEILLE</div><h1>Tout prêt pour demain.</h1><p>Ton protocole, des découpes claires et les bandes dans le bon ordre.</p></div><nav aria-label="Étapes de préparation">{['Mon protocole','Découper'].map((name,i)=><button class={tab===i?'active':''} onClick={()=>setTab(i)}><span>0{i+1}</span>{name}</button>)}</nav>
+ return <><header><a class="brand" href="#">▥ <span>strapp<span class="dot">.</span></span></a><span class="save">{saved?'● Sauvegardé sur cet appareil':'⚠ Sauvegarde indisponible : exporte ton protocole'}</span></header>{updateAvailable&&<div class="update-banner" role="status"><span><strong>Une nouvelle version est disponible.</strong> Mets à jour l’application pour profiter des dernières améliorations.</span><button onClick={applyServiceWorkerUpdate}>Mettre à jour</button></div>}<main><div class="intro"><div class="eyebrow">LE SOIN COMMENCE LA VEILLE</div><h1>Tout prêt pour demain.</h1><p>Ton protocole, des découpes claires et les bandes dans le bon ordre.</p></div><nav aria-label="Étapes de préparation">{['Mon protocole','Découper'].map((name,i)=><button class={tab===i?'active':''} onClick={()=>setTab(i)}><span>0{i+1}</span>{name}</button>)}</nav>
  {daysLeft!==null&&daysLeft<=3&&<div class="capacity-notice" role="status"><strong>Stock de Strappal bientôt épuisé</strong><p>{daysLeft===0?'Le stock enregistré ne permet plus de préparer une séance complète.':`Il reste de quoi préparer environ ${daysLeft} journée${daysLeft>1?'s':''} complète${daysLeft>1?'s':''}, à raison d’une séance par jour.`} Pense à acheter un rouleau. Cette estimation dépend des restes enregistrés et ne compte pas les pertes supplémentaires.</p><button onClick={()=>{setTab(0);requestAnimationFrame(()=>document.getElementById('stock-manager')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>Voir mon stock</button></div>}
  {notice&&<p role="status" class="notice">{notice}<button onClick={()=>setNotice('')} aria-label="Fermer">×</button></p>}
  {!result.errors.length&&result.pages.length>1&&<div class="capacity-notice" role="status"><strong>Préparation répartie sur {result.pages.length} passages</strong><p>Pour {p.sessions} séance{p.sessions>1?'s':''}, ce plan répartit les {totalPieces} bandes en {result.pages.length} passages sur ta plaque unique.</p><p>Utilise les flèches du plan pour passer d’un passage à l’autre ; chaque passage se pose et se découpe sur la plaque dans l’ordre du protocole.</p></div>}
