@@ -1,0 +1,2 @@
+.pass-stock{margin-bottom:12px;flex-shrink:0}.pass-stock p{margin:6px 0}.pass-stock .stock-allocation{max-height:96px;overflow:auto}
+.board-passes{display:flex;gap:6px;flex-wrap:wrap}.board-toolbar .board-pass{min-width:36px;min-height:36px;padding:4px 8px;font-size:13px}.board-toolbar .board-pass.is-current{background:#176b58;color:white;border-color:#176b58}

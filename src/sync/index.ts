@@ -1,12 +1,12 @@
 import { createPocketBaseApi } from './pbApi.ts';
 import { createSyncEngine } from './syncEngine.ts';
-import type { Protocol } from '../planner.ts';
+import { appSyncDocs, type AppDocs } from './syncDocs.ts';
 
 const url = (import.meta.env.VITE_PB_URL as string | undefined) || 'https://pb.flaykz.ovh';
 
 // Crée le moteur branché sur PocketBase et le localStorage, et relance la synchro au retour de focus/connexion.
-export function createAppSync(getProtocol: () => Protocol, applyRemote: (p: Protocol) => void) {
-  const engine = createSyncEngine({ api: createPocketBaseApi(url), storage: localStorage, getProtocol, applyRemote });
+export function createAppSync(docs: AppDocs) {
+  const engine = createSyncEngine({ api: createPocketBaseApi(url), storage: localStorage, docs: appSyncDocs(docs) });
   // focus et visibilitychange arrivent presque ensemble : un seul cycle par fenêtre de 2 s.
   let lastResume = 0;
   const resume = () => {

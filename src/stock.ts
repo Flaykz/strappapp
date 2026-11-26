@@ -1,17 +1,20 @@
 import type { Strip } from './planner';
+import { decodeStock } from './stockCodec.ts';
 
 export type RollType = { id:string; name:string; width:number; length:number };
 export type RollStock = { id:string; typeId:string; name:string; remaining:number };
-export type Stock = { types:RollType[]; rolls:RollStock[]; selectedTypeId:string };
+/** Roll taken by one recorded pass: exactly what to give back to the same roll on cancel. */
+export type PassRecord = { recordedAt:number; consumed:{ rollId:string; length:number }[] };
+/** Tracking of the current preparation, kept in the stock so it is synchronised with it. `passes` is keyed by pass index. */
+export type Preparation = { key:string; passes:Record<string,PassRecord> };
+export type Stock = { types:RollType[]; rolls:RollStock[]; selectedTypeId:string; preparation?:Preparation };
 export const initialStock:Stock={types:[{id:'standard',name:'Strappal 4 cm × 10 m',width:4,length:1000}],rolls:[],selectedTypeId:'standard'};
 export function loadStock():Stock {
- try {
-  const s=JSON.parse(localStorage.getItem('strapp-stock')||'null');
-  if(!s || !Array.isArray(s.types) || !Array.isArray(s.rolls) || typeof s.selectedTypeId!=='string') return initialStock;
-  if(!s.types.every((t:RollType)=>typeof t.id==='string'&&typeof t.name==='string'&&Number.isFinite(t.width)&&t.width>0&&Number.isFinite(t.length)&&t.length>0)||!s.rolls.every((r:RollStock)=>typeof r.id==='string'&&typeof r.typeId==='string'&&typeof r.name==='string'&&Number.isFinite(r.remaining)&&r.remaining>=0))return initialStock;
-  return s;
- } catch {return initialStock;}
+ try {return decodeStock(JSON.parse(localStorage.getItem('strapp-stock')||'null'))??initialStock;} catch {return initialStock;}
 }
+/** Type whose width matches (used to preselect a type when a protocol is imported). */
+export function typeForWidth(stock:Stock,width:number){return stock.types.find(t=>Math.abs(t.width-width)<1e-8);}
+export function withNewType(stock:Stock,width:number,id:string):Stock{return {...stock,types:[...stock.types,{id,name:`Rouleau ${width} cm`,width,length:1000}],selectedTypeId:id};}
 export function allocateStock(strips:Strip[],stock:Stock){
  const rolls=stock.rolls.filter(r=>r.typeId===stock.selectedTypeId).map(r=>({...r}));
  const assignments=strips.map(strip=>{
@@ -33,4 +36,19 @@ export function sessionsAvailableUpToFour(strips:Strip[],stock:Stock):number {
   current={...current,rolls:current.rolls.map(roll=>remaining.has(roll.id)?{...roll,remaining:remaining.get(roll.id)!}:roll)};
  }
  return 4;
+}
+
+/**
+ * Pure: roll pieces consumed by one pass (a list of lines, e.g. `page.map(p=>p.strip)`), given the stock
+ * as it stands before that pass. Each line takes one piece of roll of its own length.
+ */
+export function consumptionOf(strips:Strip[],stock:Stock){
+ const allocation=allocateStock(strips,stock);
+ const consumed=new Map<string,{rollId:string;rollName:string;length:number}>();
+ for(const {strip,rollId,rollName} of allocation.assignments){
+  if(!rollId)continue;
+  const entry=consumed.get(rollId)??{rollId,rollName:rollName??'',length:0};
+  entry.length+=strip.length;consumed.set(rollId,entry);
+ }
+ return {...allocation,consumed:[...consumed.values()]};
 }

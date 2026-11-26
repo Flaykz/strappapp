@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardCut, boardLabel, boardPlacement } from './boardView.ts';
+import { toView } from './boardView.ts';
 import { decodeProtocol } from './protocol.ts';
-import { plan, cutsFor, alignOffsets, type Protocol, type Strip } from './planner.ts';
+import { plan, cutsFor, type Protocol, type Placement } from './planner.ts';
+import { allocateStock, consumptionOf, type Stock } from './stock.ts';
 const example:Protocol={sessions:1,roll:5,bandWidth:2.5,boardLength:43,boardWidth:23,bands:[5,7,9].map((length,i)=>({id:String(i),name:`A${i+1}`,length,side:'both'}))};
 test('current and legacy protocols preserve bands with a single global width',()=>{
  assert.deepEqual(decodeProtocol(JSON.parse(JSON.stringify(example)))?.protocol,example);
@@ -17,10 +18,6 @@ test('current and legacy protocols preserve bands with a single global width',()
  assert.equal(old.bands[1].width,5);
  assert.equal(decodeProtocol({...example,bandWidth:'bad'}),null);
 });
-function series(lengths:number[],id:string):Strip{
- const rows=lengths.map((length,i)=>({length,used:5,pieces:[{key:`${id}-${i}`,name:id,length,width:5,side:'G',index:0}]}));
- return {length:lengths.reduce((n,l)=>n+l,0),used:5,rows,pieces:rows.flatMap(row=>row.pieces)};
-}
 test('global sessions multiply the entire protocol and validate the count',()=>{
  const p=plan({...example,sessions:2});
  assert.equal(p.strips.flatMap(s=>s.pieces).length,12);
@@ -38,95 +35,85 @@ test('legacy quantities become a global count with a warning when inconsistent',
  assert.equal(decodeProtocol({...example,sessions:'two'}),null);
  assert.deepEqual(decodeProtocol(JSON.parse(JSON.stringify(same.protocol)))!.protocol,same.protocol);
 });
-test('user four-series example reduces strokes with whole-strip offsets',()=>{
- const page=[[21,12,10],[20,11,10],[10,10],[10,16,8,8]].map((lengths,i)=>({strip:series(lengths,String(i)),x:i*5,y:0}));
- const aligned=alignOffsets(page,5,43);
- assert.deepEqual(aligned.map(item=>item.y),[0,1,0,0]);
- const cuts=cutsFor(aligned,5);
- assert.equal(cuts.length,6);assert.equal(cutsFor(page,5).length,7);
- assert.ok(cuts.some(c=>c.axis==='H'&&c.fixed===21&&c.from===0&&c.to===10));
- assert.ok(cuts.some(c=>c.axis==='H'&&c.fixed===10&&c.from===10&&c.to===20));
- // The user's 0/1/1/1 layout has the same stroke count. Series 3 ends at
- // 21 cm: that edge is already cut during preparation, not another stroke.
- assert.equal(cutsFor(page.map((item,i)=>({...item,y:i===0?0:1})),5).length,cuts.length);
- aligned.forEach((item,i)=>{assert.equal(item.strip,page[i].strip);assert.ok(item.y>=0);assert.ok(item.y+item.strip.length<=43);assert.equal(item.strip.rows!.reduce((n,row)=>n+row.length,0),item.strip.length);});
+const ids=(strip:Placement['strip'])=>strip.segments.map(seg=>seg.pieces.map(piece=>`${piece.name}${piece.side}`));
+const spec:Protocol={sessions:1,roll:5,bandWidth:2.5,boardLength:45,boardWidth:23,bands:[20,15,8,25,12].map((length,i)=>({id:String(i+1),name:String(i+1),length,side:'both'}))};
+test('segments are laid end to end, left to right, then on a new line below',()=>{
+ const p=plan(spec);
+ assert.deepEqual(p.errors,[]);
+ assert.equal(p.pages.length,1);
+ assert.equal(p.strips.length,2);
+ assert.deepEqual(p.pages[0].map(({x,y})=>[x,y]),[[0,0],[0,6]]);
+ assert.deepEqual(p.strips[0].segments.map(s=>[s.x,s.length]),[[0,20],[20,15],[35,8]]);
+ assert.deepEqual(p.strips[1].segments.map(s=>[s.x,s.length]),[[0,25],[25,12]]);
+ // G above D, in protocol order.
+ assert.deepEqual(ids(p.strips[0]),[['1G','1D'],['2G','2D'],['3G','3D']]);
+ assert.deepEqual(ids(p.strips[1]),[['4G','4D'],['5G','5D']]);
+ assert.deepEqual(p.strips.map(s=>s.length),[43,37]);
+ assert.equal(p.total,80);assert.equal(p.waste,0);
 });
-test('alignment cannot bridge a missing column or introduce gaps within a column',()=>{
- const strip=series([10,10],'a');
- const page=[{strip,x:0,y:0},{strip:series([9,10],'b'),x:10,y:0}];
- assert.deepEqual(alignOffsets(page,5,43).map(item=>item.y),[0,0]);
- const stacked=[{strip,x:0,y:0},{strip,x:0,y:20},{strip:series([9,10],'c'),x:5,y:0}];
- const aligned=alignOffsets(stacked,5,43);
- assert.equal(aligned[1].y,aligned[0].y+strip.length);
- assert.ok(aligned.every(item=>item.y>=0&&item.y+item.strip.length<=43));
+test('cuts: horizontal between lanes, then vertical at segment ends, line by line',()=>{
+ const p=plan(spec);
+ assert.deepEqual(p.pageCuts[0],[
+  {axis:'H',fixed:2.5,from:0,to:43},{axis:'V',fixed:20,from:0,to:5},{axis:'V',fixed:35,from:0,to:5},{axis:'V',fixed:43,from:0,to:5},
+  {axis:'H',fixed:8.5,from:0,to:37},{axis:'V',fixed:25,from:6,to:11},{axis:'V',fixed:37,from:6,to:11},
+ ]);
+ assert.equal(p.cuts,7);
+ assert.deepEqual(cutsFor(p.pages[0],5),p.pageCuts[0]);
 });
-test('parallel strips keep a one centimetre gap across the board',()=>{
- const result=plan({...example,boardLength:22,boardWidth:11,sessions:4,bands:[{...example.bands[0],length:10}]});
- assert.equal(result.pages.length,1);
- assert.deepEqual(result.pages[0].map(({x,y})=>[x,y]),[[0,0],[0,10],[6,0],[6,10]]);
- assert.equal(result.cuts,result.pageCuts[0].length+result.strips.length);
+test('cuts: the last stacked band is separated from the roll-width waste',()=>{
+ const one=plan({...spec,roll:5,bandWidth:2.5,sessions:1,bands:[{id:'a',name:'A',length:5,side:'left'}]});
+ assert.deepEqual(one.pageCuts[0],[{axis:'H',fixed:2.5,from:0,to:5},{axis:'V',fixed:5,from:0,to:5}]);
+ assert.equal(one.cuts,2);
+ const both=plan({...spec,roll:5,bandWidth:2,sessions:1,bands:[{id:'a',name:'A',length:5,side:'both'}]});
+ assert.deepEqual(both.pageCuts[0],[{axis:'H',fixed:2,from:0,to:5},{axis:'H',fixed:4,from:0,to:5},{axis:'V',fixed:5,from:0,to:5}]);
+ assert.equal(both.cuts,3);
 });
-test('collinear strokes join only when their segments touch',()=>{
- const strip:Strip={length:5,used:5,pieces:[{key:'a',name:'A',side:'G',index:0,length:5,width:2.5},{key:'b',name:'A',side:'D',index:0,length:5,width:2.5}]};
- assert.equal(cutsFor([{strip,x:0,y:0},{strip,x:0,y:5}],5).length,1);
- assert.equal(cutsFor([{strip,x:0,y:0},{strip,x:0,y:6}],5).length,2);
- const full:Strip={length:5,used:5,pieces:[{...strip.pieces[0],width:5}]};
- assert.equal(cutsFor([{strip,x:0,y:0},{strip:full,x:0,y:5},{strip,x:0,y:10}],5).length,2);
+test('a band wider than half the roll stays single-lane; extra pieces overflow to the next segment',()=>{
+ const single=plan({...spec,bandWidth:3,bands:[{id:'a',name:'A',length:10,side:'both'}]});
+ assert.deepEqual(single.strips[0].segments.map(s=>s.pieces.length),[1,1]);
+ assert.equal(single.strips[0].length,20);
+ assert.equal(single.waste,2*(5-3)*10);
+ const three=plan({...spec,roll:6,bandWidth:2,boardWidth:23,bands:[{id:'a',name:'A',length:10,side:'both'}],sessions:1});
+ assert.deepEqual(three.strips[0].segments.map(s=>s.pieces.length),[2]);
+ assert.equal(three.waste,2*10);
+ const narrow=plan({...spec,roll:4,bandWidth:1,bands:[{id:'a',name:'A',length:10,side:'both'}],sessions:3});
+ assert.deepEqual(narrow.strips[0].segments.map(s=>s.pieces.length),[2,2,2]);
 });
-test('pairs follow protocol order along each column',()=>{
- const p=plan(example);
- assert.equal(p.total,21);assert.equal(p.waste,0);
- assert.deepEqual(p.strips.map(s=>s.length),[5,7,9]);
- assert.deepEqual(p.pages[0].map(({y})=>y),[0,5,12]);
- assert.deepEqual(p.strips.flatMap(s=>s.pieces.map(x=>x.side)),['G','D','G','D','G','D']);
+test('no reordering: a short segment never goes back to fill an earlier line',()=>{
+ const p=plan({...spec,boardLength:30,bands:[25,10,3].map((length,i)=>({id:String(i),name:`B${i}`,length,side:'both' as const}))});
+ assert.deepEqual(p.strips.map(s=>s.segments.map(g=>g.length)),[[25],[10,3]]);
 });
-test('oversized and invalid bands are rejected, never silently truncated',()=>{for(const patch of [{length:44},{length:0}]){assert.ok(plan({...example,bands:[{...example.bands[0],...patch}]}).errors.length);}});
-test('multiple passages stay within board and never overlap',()=>{const input={...example,boardLength:10,boardWidth:5};const p=plan(input);assert.equal(p.pages.length,3);for(const page of p.pages)for(const a of page){assert.ok(a.x+input.roll<=input.boardWidth);assert.ok(a.y+a.strip.length<=input.boardLength);for(const b of page)if(a!==b)assert.ok(a.x+input.roll<=b.x||b.x+input.roll<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);}});
-test('unequal widths leave measured waste and exact quantities',()=>{const p=plan({...example,bandWidth:2,sessions:3,bands:[{...example.bands[0],side:'left'}]});assert.equal(p.strips.length,2);assert.equal(p.strips.flatMap(s=>s.pieces).length,3);assert.equal(p.waste,20);assert.equal(p.cuts,4);});
+test('lines never overflow the board and pages restart at the top',()=>{
+ const input:Protocol={...spec,boardLength:20,boardWidth:12,bands:[{id:'a',name:'A',length:20,side:'both'}],sessions:3};
+ const p=plan(input);
+ assert.equal(p.strips.length,3);
+ assert.equal(p.pages.length,2);
+ assert.deepEqual(p.pages.map(page=>page.map(({y})=>y)),[[0,6],[0]]);
+ for(const page of p.pages)for(const {strip,y} of page){assert.ok(strip.length<=input.boardLength);assert.ok(y+input.roll<=input.boardWidth);}
+ assert.equal(p.pages.flatMap(page=>page.flatMap(({strip})=>strip.pieces)).length,6);
+});
+test('invalid dimensions and oversized bands are rejected',()=>{
+ for(const patch of [{length:46},{length:0}])assert.ok(plan({...spec,bands:[{...spec.bands[0],...patch}]}).errors.length);
+ assert.ok(plan({...spec,boardWidth:4}).errors.length);
+});
 test('changing global width applies to every generated piece and rejects oversized widths',()=>{
- for(const bandWidth of [2,2.5,5]){const p=plan({...example,bandWidth});assert.equal(p.errors.length,0);assert.ok(p.strips.flatMap(s=>s.pieces).every(piece=>piece.width===bandWidth));assert.equal(p.strips.flatMap(s=>s.pieces).length,6);}
- for(const bandWidth of [0,-1,6,NaN])assert.ok(plan({...example,bandWidth}).errors.length);
+ for(const bandWidth of [2,2.5,5]){const p=plan({...spec,bandWidth});assert.equal(p.errors.length,0);assert.ok(p.strips.flatMap(s=>s.pieces).every(piece=>piece.width===bandWidth));assert.equal(p.strips.flatMap(s=>s.pieces).length,10);}
+ for(const bandWidth of [0,-1,6,NaN])assert.ok(plan({...spec,bandWidth}).errors.length);
 });
-test('merged bands fit within their parent and quantities and area are conserved',()=>{
- const p=plan({...example,boardLength:16,sessions:4});
- assert.equal(p.strips.flatMap(s=>s.pieces).length,24);
- assert.equal(new Set(p.strips.flatMap(s=>s.pieces.map(p=>p.key))).size,24);
- assert.equal(p.total,84);assert.equal(p.waste,0);
- for(const s of p.strips){assert.ok(s.length<=16);assert.equal(s.pieces.reduce((n,p)=>n+p.width,0),5);}
- for(const page of p.pages)for(const a of page)for(const b of page)if(a!==b)assert.ok(a.x+5<=b.x||b.x+5<=a.x||a.y+a.strip.length<=b.y||b.y+b.strip.length<=a.y);
+test('view swap exchanges the axes and never moves the origin',()=>{
+ assert.deepEqual(toView(5,1,false),{u:5,v:1});
+ assert.deepEqual(toView(5,1,true),{u:1,v:5});
+ assert.deepEqual(toView(0,0,true),{u:0,v:0});
 });
-test('two sessions exceeding one board preserve every band across both passages',()=>{
- const input:Protocol={...example,sessions:2,boardLength:43,boardWidth:5,bands:[{...example.bands[0],length:30}]};
- const result=plan(input);
- assert.deepEqual(result.errors,[]);
- assert.equal(result.pages.length,2);
- const pieces=result.pages.flatMap(page=>page.flatMap(({strip})=>strip.pieces));
- assert.equal(pieces.length,4);
- assert.equal(new Set(pieces.map(piece=>piece.key)).size,4);
- for(const side of ['G','D'])for(let session=0;session<2;session++)assert.ok(pieces.some(piece=>piece.key===`${input.bands[0].id}-${side}-${session}`));
- for(const page of result.pages){
-  assert.equal(page.flatMap(({strip})=>strip.pieces).length,2);
-  for(const {strip,x,y} of page){assert.ok(x>=0&&x+input.roll<=input.boardWidth);assert.ok(y>=0&&y+strip.length<=input.boardLength);}
- }
-});
-
-test('landscape keeps short strips on the left and cut coordinates consistent',()=>{
- const result=plan(example);
- const placement=result.pages[0][0];
- assert.equal(placement.strip.length,5);
- assert.deepEqual(boardPlacement(placement,true),{x:0,y:0});
- assert.deepEqual(boardPlacement(placement,false),{x:0,y:0});
- assert.equal(example.boardLength-(boardPlacement(placement,true).x+placement.strip.length),38);
- for(const cut of result.pageCuts[0]){
-  const displayed=boardCut(cut,true);
-  assert.equal(displayed.axis,cut.axis==='H'?'V':'H');
-  assert.equal(displayed.fixed,cut.fixed);
-  assert.equal(displayed.from,cut.from);
-  assert.equal(displayed.to,cut.to);
-  assert.equal(displayed.reverse,cut.reverse);
-  assert.deepEqual(boardCut(displayed,true),cut);
-  assert.deepEqual(boardCut(cut,false),cut);
- }
- assert.deepEqual(boardPlacement({...placement,x:5,y:1},true),{x:1,y:5});
- assert.equal(boardLabel(5,10,true),'matrix(0 1 1 0 5 10)');
+const stock:Stock={types:[{id:'t',name:'T',width:5,length:1000}],selectedTypeId:'t',rolls:[{id:'r1',typeId:'t',name:'R1',remaining:50},{id:'r2',typeId:'t',name:'R2',remaining:40}]};
+test('stock consumption is computed per pass from the lines of that pass',()=>{
+ const p=plan(spec);
+ const first=consumptionOf([p.strips[0]],stock);
+ assert.deepEqual(first.consumed,[{rollId:'r1',rollName:'R1',length:43}]);
+ assert.deepEqual(first.missing,[]);
+ const after:Stock={...stock,rolls:stock.rolls.map(r=>first.rolls.find(x=>x.id===r.id)??r)};
+ const second=consumptionOf([p.strips[1]],after);
+ assert.deepEqual(second.consumed,[{rollId:'r2',rollName:'R2',length:37}]);
+ assert.equal(allocateStock(p.strips,stock).missing.length,0);
+ assert.equal(consumptionOf(p.strips,{...stock,rolls:[{...stock.rolls[0],remaining:40}]}).missing.length,1);
 });

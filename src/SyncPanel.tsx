@@ -25,11 +25,11 @@ export function SyncPanel({ engine, state }: { engine: SyncEngine; state: SyncSt
   return <details class="sync-panel"><summary>Synchronisation <span class={`sync-status sync-${state.status}`} role="status" aria-live="polite"><span aria-hidden="true">{label.icon}</span> {label.text}</span></summary>
     <div class="sync-body">
       {connected ? <>
-        <p>Connecté en tant que <strong>{state.email}</strong>. Les modifications du protocole sont envoyées automatiquement ; la version la plus récente est conservée.</p>
+        <p>Connecté en tant que <strong>{state.email}</strong>. Les modifications du protocole et du stock sont envoyées automatiquement ; pour chacun, la version la plus récente est conservée.</p>
         {state.message && <p role="alert" class="sync-message">{state.message}</p>}
         <div class="sync-actions"><button type="button" onClick={() => void engine.resume()}>Synchroniser maintenant</button><button type="button" onClick={() => engine.logout()}>Se déconnecter</button></div>
       </> : <form onSubmit={e => void submit(e)}>
-        <p>Optionnel : connecte-toi pour retrouver ton protocole sur tes autres appareils. L’app reste utilisable sans compte et hors ligne. Le compte est créé par l’administrateur.</p>
+        <p>Optionnel : connecte-toi pour retrouver ton protocole et ton stock sur tes autres appareils. L’app reste utilisable sans compte et hors ligne. Le compte est créé par l’administrateur.</p>
         <div class="sync-fields"><label>Email<input type="email" autocomplete="username" required value={email} onInput={e => setEmail(e.currentTarget.value)}/></label><label>Mot de passe<input type="password" autocomplete="current-password" required value={password} onInput={e => setPassword(e.currentTarget.value)}/></label></div>
         {state.message && <p role="alert" class="sync-message">{state.message}</p>}
         <button class="primary" type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}</button>
