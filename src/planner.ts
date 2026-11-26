@@ -1,6 +1,6 @@
-export type Band = { id: string; name: string; length: number; side: 'both' | 'left' | 'right' };
+export type Band = { id: string; name: string; length: number; side: 'both' | 'left' | 'right'; fullWidth?: boolean };
 export type Protocol = { bands: Band[]; sessions: number; roll: number; bandWidth: number; boardLength: number; boardWidth: number };
-export type Piece = { key: string; group: string; name: string; length: number; width: number; side: string; index: number };
+export type Piece = { key: string; group: string; name: string; length: number; width: number; side: string; index: number; fullWidth?: boolean };
 /** Consecutive pieces of one band, stacked across the roll width. `x` is measured from the start of the line. */
 export type Segment = { x: number; length: number; pieces: Piece[] };
 /** One line = one piece of roll, unrolled left to right: segments laid end to end. */
@@ -55,16 +55,16 @@ export function validate(p: Protocol): string[] {
 /** Pieces in protocol order: session, band, then side. */
 function piecesOf(p: Protocol): Piece[] {
   return Array.from({length:p.sessions},(_,copy)=>p.bands.flatMap((b,index)=>
-    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,group:`${b.id}-${copy}`,name:b.name,length:b.length,width:p.bandWidth,side,index})))).flat();
+    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,group:`${b.id}-${copy}`,name:b.name,length:b.length,width:b.fullWidth?p.roll:p.bandWidth,side,index,fullWidth:!!b.fullWidth})))).flat();
 }
 
-/** Consecutive pieces of the same band are stacked, at most `lanes` per segment; extra pieces follow in a new segment. */
-function segmentsOf(pieces: Piece[], lanes: number): { length: number; pieces: Piece[] }[] {
+/** Consecutive pieces of the same band are stacked across the roll, at most floor(roll / piece width) per segment; extra pieces follow in a new segment. */
+function segmentsOf(pieces: Piece[], roll: number): { length: number; pieces: Piece[] }[] {
   const segments: { length: number; pieces: Piece[] }[] = [];
   let group = '';
   for (const piece of pieces) {
     const last = segments.at(-1);
-    if (last && group === piece.group && last.pieces.length < lanes) last.pieces.push(piece);
+    if (last && group === piece.group && last.pieces.length < Math.max(1, Math.floor(roll / piece.width + eps))) last.pieces.push(piece);
     else segments.push({ length: piece.length, pieces: [piece] });
     group = piece.group;
   }
@@ -79,12 +79,11 @@ function segmentsOf(pieces: Piece[], lanes: number): { length: number; pieces: P
 export function plan(p: Protocol): Plan {
   const errors = validate(p);
   if (errors.length) return {errors,strips:[],pages:[],pageCuts:[],cuts:0,total:0,waste:0};
-  const lanes = Math.max(1, Math.floor(p.roll / p.bandWidth + eps));
   const linesPerPage = Math.max(1, Math.floor((p.boardWidth + LINE_GAP + eps) / (p.roll + LINE_GAP)));
   const strips: Strip[] = [];
   const pages: Placement[][] = [];
   let line = -1, used = 0, current: Strip | null = null;
-  for (const seg of segmentsOf(piecesOf(p), lanes)) {
+  for (const seg of segmentsOf(piecesOf(p), p.roll)) {
     if (!current || used + seg.length > p.boardLength + eps) {
       line++;
       used = 0;
@@ -101,6 +100,6 @@ export function plan(p: Protocol): Plan {
   const pageCuts = pages.map(page => cutsFor(page, p.roll));
   const cuts = pageCuts.reduce((n,c)=>n+c.length,0);
   const total = strips.reduce((n,s)=>n+s.length,0);
-  const waste = strips.reduce((n,s)=>n+s.segments.reduce((m,seg)=>m+(p.roll-seg.pieces.length*p.bandWidth)*seg.length,0),0);
+  const waste = strips.reduce((n,s)=>n+s.segments.reduce((m,seg)=>m+(p.roll-seg.pieces.reduce((w,piece)=>w+piece.width,0))*seg.length,0),0);
   return {errors,strips,pages,pageCuts,cuts,total,waste};
 }

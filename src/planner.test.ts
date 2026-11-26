@@ -117,3 +117,34 @@ test('stock consumption is computed per pass from the lines of that pass',()=>{
  assert.equal(allocateStock(p.strips,stock).missing.length,0);
  assert.equal(consumptionOf(p.strips,{...stock,rolls:[{...stock.rolls[0],remaining:40}]}).missing.length,1);
 });
+test('fullWidth + both: two roll-wide pieces laid end to end, no horizontal cut, waste unchanged by them',()=>{
+ const p:Protocol={...example,bands:[{id:'f',name:'F',length:5,side:'both',fullWidth:true}]};
+ const r=plan(p);
+ assert.deepEqual(r.errors,[]);
+ const segs=r.strips.flatMap(s=>s.segments);
+ assert.equal(segs.length,2);
+ assert.deepEqual(segs.map(s=>[s.x,s.pieces.length,s.pieces[0].width,s.pieces[0].side]),[[0,1,5,'G'],[5,1,5,'D']]);
+ assert.equal(r.total,10);assert.equal(r.waste,0);
+ assert.ok(r.pageCuts.flat().every(c=>c.axis==='V'));
+});
+test('mixed protocol: normal bands stay stacked, full-width band stands alone',()=>{
+ const p:Protocol={...example,boardLength:100,bands:[{id:'a',name:'A',length:5,side:'both'},{id:'f',name:'F',length:4,side:'both',fullWidth:true},{id:'b',name:'B',length:3,side:'both'}]};
+ const r=plan(p);
+ const segs=r.strips.flatMap(s=>s.segments);
+ assert.deepEqual(segs.map(s=>[s.pieces.length,s.pieces[0].width]),[[2,2.5],[1,5],[1,5],[2,2.5]]);
+ assert.equal(r.total,5+4+4+3);assert.equal(r.waste,0);
+ assert.equal(r.pageCuts.flat().filter(c=>c.axis==='H').length,2);
+});
+test('fullWidth + left gives a single roll-wide piece',()=>{
+ const r=plan({...example,bands:[{id:'f',name:'F',length:6,side:'left',fullWidth:true}]});
+ const pieces=r.strips.flatMap(s=>s.pieces);
+ assert.deepEqual(pieces.map(x=>[x.side,x.width]),[['G',5]]);
+ assert.equal(r.total,6);assert.equal(r.waste,0);
+});
+test('fullWidth is kept on decode, absent otherwise',()=>{
+ const p:Protocol={...example,bands:[{...example.bands[0],fullWidth:true},example.bands[1]]};
+ const d=decodeProtocol(JSON.parse(JSON.stringify(p)))!.protocol;
+ assert.equal(d.bands[0].fullWidth,true);
+ assert.ok(!('fullWidth' in d.bands[1]));
+ assert.ok(!('fullWidth' in decodeProtocol({...p,bands:[{...p.bands[0],fullWidth:'yes'}]})!.protocol.bands[0]));
+});

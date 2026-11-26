@@ -48,7 +48,7 @@ export function BoardPlan({page,pageIndex,roll,boardLength,boardWidth,swapped}:{
    <rect {...rect(x,y,strip.length,roll)} fill="#e3e0d8" stroke="#74867b" stroke-width={fs*0.06}/>
    {strip.segments.map(seg=>seg.pieces.map((piece,lane)=>{
     const r=rect(x+seg.x,y+lane*piece.width,seg.length,piece.width);
-    const text=`${piece.name} · ${piece.side}`,room=Math.min(r.width-fs*0.3,r.height);
+    const text=`${piece.name} · ${piece.side}${piece.fullWidth?' · entière':''}`,room=Math.min(r.width-fs*0.3,r.height);
     const size=Math.min(fs*0.8,r.height*0.5,(Math.max(r.width,r.height)-fs*0.4)/(text.length*0.58));
     return <g><rect {...r} fill={colors[piece.index%colors.length]} stroke="white" stroke-width={fs*0.08}/>{room>0&&size>=fs*0.3&&<text x={r.x+r.width/2} y={r.y+r.height/2} text-anchor="middle" dominant-baseline="central" font-size={size} fill="#243b30">{text}</text>}</g>;
    }))}

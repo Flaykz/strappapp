@@ -22,7 +22,7 @@ export function decodeProtocol(value: unknown): { protocol: Protocol; migrated: 
     if(oldQuantity&&typeof b.quantity!=='number')return null;
     if(oldWidth)widths.push(b.width);
     if(oldQuantity)quantities.push(b.quantity);
-    bands.push({id:b.id,name:b.name,length:b.length,side:b.side});
+    bands.push({id:b.id,name:b.name,length:b.length,side:b.side,...(b.fullWidth===true?{fullWidth:true}:{})});
   }
   if(new Set(bands.map(b=>b.id)).size!==bands.length)return null;
   const mixedQuantities=new Set(quantities).size>1;

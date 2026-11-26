@@ -87,6 +87,8 @@ test('fingerprint: protocol, roll width or board changes start a new preparation
   assert.notEqual(planKey({ ...protocol, boardLength: 40 }), key);
   assert.notEqual(planKey({ ...protocol, bands: [protocol.bands[1], protocol.bands[0]] }), key);
   assert.equal(planKey({ ...protocol, bands: protocol.bands.map(b => ({ ...b, name: 'renamed' })) }), key);
+  assert.notEqual(planKey({ ...protocol, bands: protocol.bands.map((b, i) => (i ? b : { ...b, fullWidth: true })) }), key);
+  assert.equal(planKey({ ...protocol, bands: protocol.bands.map(b => ({ ...b, fullWidth: false })) }), key);
 });
 
 test('changed fingerprint: old passes are not tracked but stay deducted, are counted as stale, and recording restarts the tracking', () => {
