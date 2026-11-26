@@ -1,7 +1,7 @@
 export type Band = { id: string; name: string; length: number; side: 'both' | 'left' | 'right'; fullWidth?: boolean };
 export type Protocol = { bands: Band[]; sessions: number; roll: number; bandWidth: number; boardLength: number; boardWidth: number };
-export type Piece = { key: string; group: string; name: string; length: number; width: number; side: string; index: number; fullWidth?: boolean };
-/** Consecutive pieces of one band, stacked across the roll width. `x` is measured from the start of the line. */
+export type Piece = { key: string; name: string; length: number; width: number; side: string; index: number; fullWidth?: boolean };
+/** Consecutive pieces of identical length and width, stacked across the roll width. `x` is measured from the start of the line. */
 export type Segment = { x: number; length: number; pieces: Piece[] };
 /** One line = one piece of roll, unrolled left to right: segments laid end to end. */
 export type Strip = { length: number; segments: Segment[]; pieces: Piece[] };
@@ -55,18 +55,16 @@ export function validate(p: Protocol): string[] {
 /** Pieces in protocol order: session, band, then side. */
 function piecesOf(p: Protocol): Piece[] {
   return Array.from({length:p.sessions},(_,copy)=>p.bands.flatMap((b,index)=>
-    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,group:`${b.id}-${copy}`,name:b.name,length:b.length,width:b.fullWidth?p.roll:p.bandWidth,side,index,fullWidth:!!b.fullWidth})))).flat();
+    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,name:b.name,length:b.length,width:b.fullWidth?p.roll:p.bandWidth,side,index,fullWidth:!!b.fullWidth})))).flat();
 }
 
-/** Consecutive pieces of the same band are stacked across the roll, at most floor(roll / piece width) per segment; extra pieces follow in a new segment. */
+/** Consecutive pieces (of any band) with exactly the same length and width are stacked across the roll, at most floor(roll / piece width) per segment; extra pieces follow in a new segment. */
 function segmentsOf(pieces: Piece[], roll: number): { length: number; pieces: Piece[] }[] {
   const segments: { length: number; pieces: Piece[] }[] = [];
-  let group = '';
   for (const piece of pieces) {
     const last = segments.at(-1);
-    if (last && group === piece.group && last.pieces.length < Math.max(1, Math.floor(roll / piece.width + eps))) last.pieces.push(piece);
+    if (last && last.length === piece.length && last.pieces[0].width === piece.width && last.pieces.length < Math.max(1, Math.floor(roll / piece.width + eps))) last.pieces.push(piece);
     else segments.push({ length: piece.length, pieces: [piece] });
-    group = piece.group;
   }
   return segments;
 }

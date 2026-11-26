@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { toView } from './boardView.ts';
 import { decodeProtocol } from './protocol.ts';
 import { plan, cutsFor, type Protocol, type Placement } from './planner.ts';
-import { allocateStock, consumptionOf, type Stock } from './stock.ts';
+import { allocateStock, consumptionOf, sessionsAvailableUpToFour, type Stock } from './stock.ts';
 const example:Protocol={sessions:1,roll:5,bandWidth:2.5,boardLength:43,boardWidth:23,bands:[5,7,9].map((length,i)=>({id:String(i),name:`A${i+1}`,length,side:'both'}))};
 test('current and legacy protocols preserve bands with a single global width',()=>{
  assert.deepEqual(decodeProtocol(JSON.parse(JSON.stringify(example)))?.protocol,example);
@@ -77,7 +77,7 @@ test('a band wider than half the roll stays single-lane; extra pieces overflow t
  assert.deepEqual(three.strips[0].segments.map(s=>s.pieces.length),[2]);
  assert.equal(three.waste,2*10);
  const narrow=plan({...spec,roll:4,bandWidth:1,bands:[{id:'a',name:'A',length:10,side:'both'}],sessions:3});
- assert.deepEqual(narrow.strips[0].segments.map(s=>s.pieces.length),[2,2,2]);
+ assert.deepEqual(narrow.strips[0].segments.map(s=>s.pieces.length),[4,2]);
 });
 test('no reordering: a short segment never goes back to fill an earlier line',()=>{
  const p=plan({...spec,boardLength:30,bands:[25,10,3].map((length,i)=>({id:String(i),name:`B${i}`,length,side:'both' as const}))});
@@ -117,6 +117,16 @@ test('stock consumption is computed per pass from the lines of that pass',()=>{
  assert.equal(allocateStock(p.strips,stock).missing.length,0);
  assert.equal(consumptionOf(p.strips,{...stock,rolls:[{...stock.rolls[0],remaining:40}]}).missing.length,1);
 });
+test('available sessions use the real multi-session plan, which stacks identical pieces across sessions',()=>{
+ const protocol:Protocol={...example,roll:4,bandWidth:1,boardLength:100,boardWidth:10,bands:[{id:'a',name:'A',length:10,side:'both'}]};
+ assert.deepEqual(plan({...protocol,sessions:3}).strips.map(s=>s.length),[20]);
+ const mk=(remaining:number):Stock=>({types:[{id:'t',name:'T',width:4,length:1000}],selectedTypeId:"t",rolls:[{id:"r",typeId:"t",name:"R",remaining}]});
+ const linesFor=(n:number)=>{const r=plan({...protocol,sessions:n});return r.errors.length?null:r.strips;};
+ assert.equal(sessionsAvailableUpToFour(linesFor,mk(10)),2);
+ assert.equal(sessionsAvailableUpToFour(linesFor,mk(19)),2);
+ assert.equal(sessionsAvailableUpToFour(linesFor,mk(5)),0);
+ assert.equal(sessionsAvailableUpToFour(linesFor,mk(20)),4);
+});
 test('fullWidth + both: two roll-wide pieces laid end to end, no horizontal cut, waste unchanged by them',()=>{
  const p:Protocol={...example,bands:[{id:'f',name:'F',length:5,side:'both',fullWidth:true}]};
  const r=plan(p);
@@ -147,4 +157,28 @@ test('fullWidth is kept on decode, absent otherwise',()=>{
  assert.equal(d.bands[0].fullWidth,true);
  assert.ok(!('fullWidth' in d.bands[1]));
  assert.ok(!('fullWidth' in decodeProtocol({...p,bands:[{...p.bands[0],fullWidth:'yes'}]})!.protocol.bands[0]));
+});
+const stackSpec={...example,boardLength:100,bands:[] as Protocol['bands']};
+const mk=(id:string,length:number,side:'both'|'left'|'right')=>({id,name:id.toUpperCase(),length,side});
+const layout=(bands:Protocol['bands'])=>plan({...stackSpec,bands}).strips.flatMap(s=>s.segments.map(g=>g.pieces.map(x=>`${x.name}·${x.side}`)));
+test('left + right bands of equal length are stacked',()=>{
+ const r=plan({...stackSpec,bands:[mk('a',20,'left'),mk('b',20,'right')]});
+ assert.deepEqual(layout([mk('a',20,'left'),mk('b',20,'right')]),[['A·G','B·D']]);
+ assert.equal(r.total,20);
+ assert.deepEqual(r.pageCuts[0].filter(c=>c.axis==='H').map(c=>[c.fixed,c.from,c.to]),[[2.5,0,20]]);
+ assert.equal(r.pageCuts[0].filter(c=>c.axis==='V').length,1);
+ assert.equal(r.waste,0);
+});
+test('both + both is unchanged',()=>{
+ assert.deepEqual(layout([mk('a',20,'both'),mk('b',20,'both')]),[['A·G','A·D'],['B·G','B·D']]);
+});
+test('left then both stacks greedily',()=>{
+ assert.deepEqual(layout([mk('a',20,'left'),mk('b',20,'both')]),[['A·G','B·G'],['B·D']]);
+});
+test('different lengths are not stacked',()=>{
+ assert.deepEqual(layout([mk('a',20,'left'),mk('b',25,'right')]),[['A·G'],['B·D']]);
+});
+test('full width pieces never stack',()=>{
+ const f=(id:string)=>({...mk(id,20,'left'),fullWidth:true});
+ assert.deepEqual(layout([f('a'),f('b')]),[['A·G'],['B·G']]);
 });

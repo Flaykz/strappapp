@@ -26,17 +26,20 @@ export function allocateStock(strips:Strip[],stock:Stock){
  return {assignments,rolls,missing:assignments.filter(a=>!a.rollId)};
 }
 
-// Count up to four complete sessions, respecting the length of each roll.
-export function sessionsAvailableUpToFour(strips:Strip[],stock:Stock):number {
- let current=stock;
- for(let days=0;days<4;days++){
-  const allocation=allocateStock(strips,current);
-  if(allocation.missing.length)return days;
-  const remaining=new Map(allocation.rolls.map(roll=>[roll.id,roll.remaining]));
-  current={...current,rolls:current.rolls.map(roll=>remaining.has(roll.id)?{...roll,remaining:remaining.get(roll.id)!}:roll)};
+/**
+ * Largest n in 1..4 whose real plan (`linesFor(n)`, lines of n sessions together) fits the stock, 0 if none.
+ * The planner stacks consecutive identical pieces, even across sessions, so n sessions can cost less than n times one.
+ * `linesFor` returns null when the plan is not valid.
+ */
+export function sessionsAvailableUpToFour(linesFor:(sessions:number)=>Strip[]|null,stock:Stock):number {
+ let best=0;
+ for(let n=1;n<=4;n++){
+  const strips=linesFor(n);
+  if(strips&&strips.length&&!allocateStock(strips,stock).missing.length)best=n;
  }
- return 4;
+ return best;
 }
+
 
 /**
  * Pure: roll pieces consumed by one pass (a list of lines, e.g. `page.map(p=>p.strip)`), given the stock
