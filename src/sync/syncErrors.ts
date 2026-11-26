@@ -12,8 +12,8 @@ export class SyncError extends Error {
 export function userMessage(error: unknown): string {
   if (error instanceof SyncError) {
     if (error.kind === 'network') return 'Serveur injoignable. Les modifications seront envoyées au retour de la connexion.';
-    if (error.kind === 'auth') return 'Session expirée ou refusée : reconnecte-toi.';
-    if (error.kind === 'unavailable') return 'Collection absente du serveur : synchronisation indisponible pour l’instant.';
+    if (error.kind === 'auth') return 'Session expirée : reconnecte-toi.';
+    if (error.kind === 'unavailable') return 'Collection absente ou inaccessible sur le serveur : synchronisation indisponible pour l’instant.';
     if (error.kind === 'conflict') return 'Conflit de synchronisation persistant. Réessaie dans un instant.';
     return error.message || 'Erreur du serveur de synchronisation.';
   }

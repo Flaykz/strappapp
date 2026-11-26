@@ -336,7 +336,7 @@ test('stock: missing collection fails cleanly with a clear message, the protocol
     const s = t.engine.getState();
     assert.equal(s.docs.protocol?.status, 'synced');
     assert.equal(s.docs.stock?.status, 'error');
-    assert.match(s.docs.stock!.message, /Collection absente du serveur/);
+    assert.match(s.docs.stock!.message, /Collection absente ou inaccessible/);
     assert.match(s.message, /^Stock : Collection absente/);
     assert.equal(t.stockMeta().pending, true);
     const before = t.stockCalls.length;

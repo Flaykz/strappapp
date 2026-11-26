@@ -23,7 +23,10 @@ export function toSyncError(e: unknown, op: Op = 'other'): SyncError {
   if (e instanceof SyncError) return e;
   if (e instanceof ClientResponseError) {
     if (e.status === 0) return new SyncError('network', 'Réseau indisponible');
-    if (e.status === 401 || e.status === 403) return new SyncError('auth', 'Non autorisé');
+    // Seule une 401 signifie « session invalide ». Une 403 vient d'une règle de collection ou d'une collection absente
+    // (PocketBase répond 403 « Only superusers can perform this action » pour une collection inexistante) : pas la session.
+    if (e.status === 401) return new SyncError('auth', 'Non autorisé');
+    if (e.status === 403) return op === 'list' ? new SyncError('unavailable', 'Collection inaccessible') : new SyncError('server', 'Accès refusé par le serveur (403)');
     // 404 à la lecture ou à la création : la collection n'existe pas (« Missing collection context »), pas de nouvel essai utile.
     if ((op === 'list' || op === 'create') && e.status === 404) return new SyncError('unavailable', 'Collection introuvable');
     // 400 à la création : en pratique la violation de l'index unique sur `owner`.
