@@ -8,7 +8,7 @@ import type { Remote, SyncApi } from './pbApi.ts';
 import type { Protocol } from '../planner.ts';
 import type { Stock } from '../stock.ts';
 
-const mk = (length: number): Protocol => ({ sessions: 1, roll: 5, bandWidth: 2.5, boardLength: 43, boardWidth: 23, bands: [{ id: 'a', name: 'A1', length, side: 'both' }] });
+const mk = (length: number): Protocol => ({ sessions: 1, roll: 5, boardLength: 43, boardWidth: 23, bands: [{ id: 'a', name: 'A1', length, side: 'both' }] });
 const mkStock = (remaining: number): Stock => ({ types: [{ id: 't', name: 'T', width: 4, length: 1000 }], rolls: [{ id: 'r', typeId: 't', name: 'R1', remaining }], selectedTypeId: 't' });
 const lengthOf = (data: unknown) => (data as Protocol).bands[0].length;
 const remainingOf = (data: unknown) => (data as Stock).rolls[0].remaining;

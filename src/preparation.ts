@@ -8,7 +8,7 @@ const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
  * Band names do not change the plan, so they are left out. Roll remainders are not part of it either.
  */
 export function planKey(p: Protocol): string {
-  const text = JSON.stringify([p.sessions, p.roll, p.bandWidth, p.boardLength, p.boardWidth, p.bands.map(b => [b.id, b.length, b.side, !!b.fullWidth])]);
+  const text = JSON.stringify([p.sessions, p.roll,p.boardLength, p.boardWidth, p.bands.map(b => [b.id, b.length, b.side, !!b.fullWidth])]);
   // cyrb53: compact 53-bit hash, plenty to tell two plans apart.
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
   for (let i = 0; i < text.length; i++) {

@@ -5,7 +5,7 @@ import { decodeProtocol } from '../protocol.ts';
 import { decodeStock } from '../stockCodec.ts';
 import type { Protocol } from '../planner.ts';
 
-const proto: Protocol = { sessions: 1, roll: 5, bandWidth: 2.5, boardLength: 43, boardWidth: 23, bands: [{ id: 'a', name: 'A1', length: 5, side: 'both' }] };
+const proto: Protocol = { sessions: 1, roll: 5, boardLength: 43, boardWidth: 23, bands: [{ id: 'a', name: 'A1', length: 5, side: 'both' }] };
 const decide = (local: Parameters<typeof decideWith>[0], r: Parameters<typeof decideWith>[1]) => decideWith(local, r, raw => decodeProtocol(raw)?.protocol ?? null);
 const remote = (clientUpdatedAt: number, data: unknown = proto) => ({ id: 'r1', data, clientUpdatedAt });
 

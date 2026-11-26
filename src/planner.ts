@@ -1,5 +1,5 @@
 export type Band = { id: string; name: string; length: number; side: 'both' | 'left' | 'right'; fullWidth?: boolean };
-export type Protocol = { bands: Band[]; sessions: number; roll: number; bandWidth: number; boardLength: number; boardWidth: number };
+export type Protocol = { bands: Band[]; sessions: number; roll: number; boardLength: number; boardWidth: number };
 export type Piece = { key: string; name: string; length: number; width: number; side: string; index: number; fullWidth?: boolean };
 /** Consecutive pieces of identical length and width, stacked across the roll width. `x` is measured from the start of the line. */
 export type Segment = { x: number; length: number; pieces: Piece[] };
@@ -39,8 +39,6 @@ export function validate(p: Protocol): string[] {
   const errors: string[] = [];
   if (![p.roll,p.boardLength,p.boardWidth].every(n=>Number.isFinite(n)&&n>0&&n<=10000)) errors.push('Les dimensions du matériel doivent être positives et inférieures ou égales à 10 000 cm.');
   if (p.roll > p.boardWidth) errors.push('La largeur du rouleau dépasse la largeur utile de la plaque. Inverse les dimensions de la plaque si nécessaire.');
-  if (!Number.isFinite(p.bandWidth)||p.bandWidth<=0||p.bandWidth>10000) errors.push('La largeur commune des bandes doit être positive et inférieure ou égale à 10 000 cm.');
-  if (p.bandWidth>p.roll) errors.push('La largeur commune des bandes dépasse celle du rouleau.');
   if (!p.bands.length) errors.push('Ajoute au moins une bande.');
   if (!Number.isInteger(p.sessions)||p.sessions<1||p.sessions>100) errors.push('Le nombre de séances doit être un entier entre 1 et 100.');
   p.bands.forEach((b,i)=>{
@@ -55,7 +53,7 @@ export function validate(p: Protocol): string[] {
 /** Pieces in protocol order: session, band, then side. */
 function piecesOf(p: Protocol): Piece[] {
   return Array.from({length:p.sessions},(_,copy)=>p.bands.flatMap((b,index)=>
-    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,name:b.name,length:b.length,width:b.fullWidth?p.roll:p.bandWidth,side,index,fullWidth:!!b.fullWidth})))).flat();
+    (b.side==='both'?['G','D']:[b.side==='left'?'G':'D']).map(side=>({key:`${b.id}-${side}-${copy}`,name:b.name,length:b.length,width:b.fullWidth?p.roll:p.roll/2,side,index,fullWidth:!!b.fullWidth})))).flat();
 }
 
 /** Consecutive pieces (of any band) with exactly the same length and width are stacked across the roll, at most floor(roll / piece width) per segment; extra pieces follow in a new segment. */

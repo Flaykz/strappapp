@@ -5,7 +5,7 @@ import type { Stock } from './stock.ts';
 import { cancelPass, clearPreparation, passRecord, planKey, recordPass, staleCount } from './preparation.ts';
 
 // Plaque 43 x 8 : une seule ligne par passage, donc plusieurs passages à longueurs différentes.
-const protocol: Protocol = { sessions: 1, roll: 5, bandWidth: 5, boardLength: 43, boardWidth: 5, bands: [{ id: 'a', name: 'A', length: 10, side: 'both' }, { id: 'b', name: 'B', length: 20, side: 'both' }] };
+const protocol: Protocol = { sessions: 1, roll: 5, boardLength: 43, boardWidth: 5, bands: [{ id: 'a', name: 'A', length: 10, side: 'both', fullWidth: true }, { id: 'b', name: 'B', length: 20, side: 'both', fullWidth: true }] };
 const p = plan(protocol);
 const pass = (i: number) => p.pages[i].map(pl => pl.strip);
 const mkStock = (...remaining: number[]): Stock => ({ types: [{ id: 't', name: 'T', width: 5, length: 1000 }], selectedTypeId: 't', rolls: remaining.map((r, i) => ({ id: `r${i}`, typeId: 't', name: `R${i + 1}`, remaining: r })) });
@@ -87,8 +87,8 @@ test('fingerprint: protocol, roll width or board changes start a new preparation
   assert.notEqual(planKey({ ...protocol, boardLength: 40 }), key);
   assert.notEqual(planKey({ ...protocol, bands: [protocol.bands[1], protocol.bands[0]] }), key);
   assert.equal(planKey({ ...protocol, bands: protocol.bands.map(b => ({ ...b, name: 'renamed' })) }), key);
-  assert.notEqual(planKey({ ...protocol, bands: protocol.bands.map((b, i) => (i ? b : { ...b, fullWidth: true })) }), key);
-  assert.equal(planKey({ ...protocol, bands: protocol.bands.map(b => ({ ...b, fullWidth: false })) }), key);
+  assert.notEqual(planKey({ ...protocol, bands: protocol.bands.map((b, i) => (i ? b : { ...b, fullWidth: false })) }), key);
+  assert.equal(planKey({ ...protocol, bands: protocol.bands.map(b => ({ ...b, fullWidth: true })) }), key);
 });
 
 test('changed fingerprint: old passes are not tracked but stay deducted, are counted as stale, and recording restarts the tracking', () => {
